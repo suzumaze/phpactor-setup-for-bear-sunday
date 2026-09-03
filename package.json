@@ -26,11 +26,6 @@
         "configuration": {
             "title": "Phpactor Setup for BEAR.Sunday",
             "properties": {
-                "phpactorSetup.sourceRepo": {
-                    "type": "string",
-                    "default": "/Users/suzumaze/MyProject/BEAR.Lsp",
-                    "description": "suzumaze/bear-phpactor-extension のソースリポジトリ。composer の path リポジトリとして参照する絶対パス。"
-                },
                 "phpactor.path": {
                     "type": "string",
                     "description": "phpactor バイナリの絶対パス。この拡張がグローバルインストール先の vendor/bin/phpactor を書き込む。"

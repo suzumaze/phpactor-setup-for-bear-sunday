@@ -9,7 +9,6 @@ const GLOBAL_DIR_NAME = 'phpactor-global';
 const INIT_BIN = 'bear-phpactor-init';
 const PHPACTOR_BIN_REL = path.join('vendor', 'bin', 'phpactor');
 const GLOBAL_CONFIG_REL = path.join('phpactor', 'phpactor.json');
-const DEFAULT_SOURCE_REPO = '/Users/suzumaze/MyProject/BEAR.Lsp';
 
 // 自動検出とコマンド実行が同時に走ったときに runSetup が二重実行されないようにする。
 let setupRunning = false;
@@ -136,9 +135,9 @@ function globalConfigFile(): string {
  * グローバルインストール用 composer.json。
  * phpactor/language-server-protocol の 3.17.4 ピンは必須（外すと initialize が
  * エラーになる。実験で確認済み）。suzumaze/bear-phpactor-extension は Packagist
- * 未公開なので path リポジトリでソースを指す。
+ * に公開済みなので、通常のバージョン指定で取得する。
  */
-function globalComposerJson(sourceRepo: string): string {
+function globalComposerJson(): string {
     const composer = {
         'minimum-stability': 'dev',
         'prefer-stable': false,
@@ -146,9 +145,8 @@ function globalComposerJson(sourceRepo: string): string {
             php: '^8.2',
             'phpactor/phpactor': '*',
             'phpactor/language-server-protocol': '3.17.4',
-            'suzumaze/bear-phpactor-extension': '*',
+            'suzumaze/bear-phpactor-extension': '^0.1',
         },
-        repositories: [{ type: 'path', url: sourceRepo }],
     };
     return JSON.stringify(composer, null, 4) + '\n';
 }
@@ -237,9 +235,6 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
             return;
         }
 
-        const sourceRepo = vscode.workspace
-            .getConfiguration('phpactorSetup')
-            .get<string>('sourceRepo', DEFAULT_SOURCE_REPO);
         const globalDir = path.join(context.globalStorageUri.fsPath, GLOBAL_DIR_NAME);
         const phpactorBin = path.join(globalDir, PHPACTOR_BIN_REL);
 
@@ -253,7 +248,7 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
                 try {
                     // 3. グローバルインストール（初回は composer install、済みなら更新確認）。
                     fs.mkdirSync(globalDir, { recursive: true });
-                    fs.writeFileSync(path.join(globalDir, 'composer.json'), globalComposerJson(sourceRepo));
+                    fs.writeFileSync(path.join(globalDir, 'composer.json'), globalComposerJson());
 
                     if (fs.existsSync(phpactorBin)) {
                         const answer = await vscode.window.showInformationMessage(
