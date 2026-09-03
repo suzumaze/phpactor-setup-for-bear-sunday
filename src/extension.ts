@@ -318,7 +318,7 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
                     const existingPath = phpactorConfig.get<string | null>('path');
                     if (existingPath !== undefined && existingPath !== null && existingPath !== phpactorBin) {
                         const answer = await vscode.window.showInformationMessage(
-                            `phpactor.path に別の値（${existingPath}）が設定されています。上書きしますか？`,
+                            `phpactor.path に別の値（${existingPath}）が設定されています。${phpactorBin} に上書きしますか？`,
                             '上書きする',
                             'キャンセル',
                         );
