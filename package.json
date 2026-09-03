@@ -5,6 +5,10 @@
     "version": "0.1.0",
     "publisher": "suzumaze",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/suzumaze/phpactor-setup-for-bear-sunday.git"
+    },
     "engines": {
         "vscode": "^1.80.0"
     },
