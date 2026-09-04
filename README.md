@@ -1,37 +1,124 @@
 # Phpactor Setup for BEAR.Sunday
 
-BEAR.Sunday プロジェクト向けに phpactor と、BEAR.Sunday の規約を phpactor に教える Composer パッケージ（suzumaze/bear-phpactor-extension）をVS Codeで使えるようにする、セットアップ専用の薄い拡張機能です。
+BEAR.Sunday固有のIDE/LSP機能を提供するComposerパッケージ
+[`suzumaze/bear-phpactor-extension`](https://github.com/suzumaze/bear-phpactor-extension)を、
+VS CodeのPhpactorから利用できるようにするセットアップ専用の薄い拡張機能です。
 
-## これが何か
+## 目的と責務
 
-この拡張は、対象プロジェクトの `composer.json` に一切触れずに、phpactor と対象パッケージをグローバルインストールします。機能そのもの（定義ジャンプなど）は実装していません。あくまでセットアップの代行だけを行います。
+この拡張自身はResource URI解析、SQL・ALPS・JSON Schema・Routerの解決、定義ジャンプ、参照検索、補完などを実装しません。BEAR.Sunday固有の知識は`bear-phpactor-extension`に置き、本拡張はVS Code固有のインストールと設定だけを担当します。
 
-## 正直な開示
+```text
+BEAR.Sunday固有のIDE/LSP機能
+        ↓
+bear-phpactor-extension
+        ↓
+Phpactor / LSP
+        ↓
+VS Code / Neovim / Emacs / その他LSP client
 
-phpactor の公式READMEには次のように明記されています。
+VS Code固有のセットアップ
+        ↓
+phpactor-setup-for-bear-sunday
+```
 
-> Phpactor is a general tool, it is not intended that it be installed as a project dependency.
+対象プロジェクトの`composer.json`や`.vscode/settings.json`は変更しません。Phpactorと`bear-phpactor-extension`は本拡張の`globalStorageUri`配下へインストールし、次の2点だけをglobalに反映します。
 
-この拡張が使う「グローバルインストール方式」は、この方針を尊重しつつ、対象パッケージ側の技術的制約に対応するための工夫です。対象パッケージの phpactor 拡張クラスはブート時に new されるため、対象プロジェクトの `vendor/autoload.php` に依存させずに済ませる必要があります。そのため、phpactor と対象パッケージをプロジェクト外（グローバル）にインストールし、phpactor のグローバル設定から対象パッケージを読み込む方式を取っています。
+- `$XDG_CONFIG_HOME/phpactor/phpactor.json`（未設定時は`~/.config/phpactor/phpactor.json`）
+- VS Code User Settingsの`phpactor.path`
+
+これは1つのworkspace専用設定ではありません。複数のBEAR.Sundayプロジェクトから、同じ管理対象Phpactor installationを共有する設計です。
+
+## 要件
+
+- PHP 8.2以上
+- Composer
+- VS Code 1.91以上（依存する`phpactor.vscode-phpactor` 1.7.8と同じminimum）
+
+PHPはComposer実行前に`PHP_VERSION_ID`で検査し、8.2未満なら環境を変更せず終了します。
 
 ## 使い方
 
-対象の BEAR.Sunday プロジェクトを VS Code で開くと、「BEAR.Sundayプロジェクトを検出しました。定義ジャンプなどの機能をセットアップしますか？」という通知が自動で表示されます。「セットアップする」を選ぶだけで完了します。このプロジェクトでは今後確認したくない場合は「今後確認しない」を選んでください。
+`bear/resource`を`require`または`require-dev`に持つプロジェクトを開くと、グローバルセットアップであることを明記した確認通知が表示されます。コマンドパレットから手動実行することもできます。
 
-通知を見逃した場合や、あとから再セットアップしたい場合は、コマンドパレット(⇧⌘P / Ctrl+Shift+P で開く、キーボードだけで機能を呼び出せる入力欄)から「Phpactor Setup for BEAR.Sunday: このプロジェクト向けにセットアップ」を実行することもできます。
+```text
+Phpactor Setup for BEAR.Sunday: グローバルセットアップ
+```
 
-`bear/resource` を require（または require-dev）に持つプロジェクトでしか動作しません。
+setup後にPhpactorを元の状態へ戻す場合は、次を実行します。
 
-## IDEA（PhpStorm）向けに何も無い理由
+```text
+Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す
+```
 
-同じ目的の、より機能が多く活発に開発されているプラグイン [idea-php-bearsunday-plugin](https://github.com/bearsunday/idea-php-bearsunday-plugin) が既に存在するため、車輪の再発明を避けました。PhpStorm を使っている場合はそちらを利用してください。
+## 非破壊setupとrestore
+
+初回setupでは、ユーザー環境へ書き込む前に次の状態を`ExtensionContext.globalState`へ保存します。再setupでこのoriginal backupを現在値に置き換えることはありません。
+
+- global Phpactor configが存在したか、および存在した場合の元の内容
+- VS Code User Settingsとして明示されていた`phpactor.path`（`inspect('path').globalValue`）
+- `phpactor.path`が未設定だったこと
+- 本拡張が書いたconfigの内容とSHA-256
+- 本拡張が設定したPhpactor pathと管理対象install directory
+- state schema versionとsetup extension version
+
+既存global configは丸ごと置き換えません。setupは次の順序で処理します。
+
+1. 既存configをJSON objectとして検証する。invalid JSON、symlink、通常ファイルでない場合は変更せず中止する。
+2. 既存config全体を作業用`.phpactor.json`のseedにする。
+3. `bear-phpactor-init`へ`container.extension_classes`の再生成と重複除去を任せる。
+4. 生成結果が既存の他キーを保持し、BEAR extension classを先頭に1回だけ含むことを検証する。
+5. setup中の同時変更がないことを再確認し、一時ファイルをflushしてrenameするatomic writeでglobal configへ反映する。
+
+したがって、PHPStan、PHP CS Fixer、indexer、completion等の既存設定は保持されます。既存configが壊れている場合に、勝手な修正・削除・上書きは行いません。
+
+restoreは現在値と「setup時に本拡張が書いた値」を比較します。一致するときだけ自動復元し、元々configがなければ生成ファイルを削除、元々`phpactor.path`が未設定ならUser setting自体を未設定へ戻します。本拡張の管理対象install directoryも削除します。
+
+setup後のユーザー変更を検出した場合は、変更対象を明示したmodal warningを出します。defaultはCancelで、ユーザーが「変更を破棄して復元」を明示的に選んだ場合だけoriginal backupを上書きします。途中まで復元して失敗した場合も項目ごとに進捗を保存するため、restoreは再実行可能で冪等です。
+
+## Phpactor互換性方針
+
+この拡張が生成するComposer projectは、`phpactor/phpactor`を`2026.07.22.0`へexact pinします。これは`bear-phpactor-extension` v0.1.0の開発・テスト環境で使われ、Phpactor公式VS Code client 1.7.8も取得しているreleaseです。
+
+Phpactorのversionはリリース日を表すCalVer形式です。日付が新しいことは、内部extension class構成やextension APIとの互換性を保証しません。`bear-phpactor-extension`はその内部構成に依存するため、未検証の将来versionを`*`や`latest`で自動取得せず、検証後にpinを意図的に更新します。
+
+初回解決後の`composer.lock`は管理対象install directoryに保持します。通常の再setupは`composer install`で同じdependency graphを再現し、この拡張がcompatibility manifestを意図的に変更したときだけ`composer update`で再解決します。
+
+`phpactor/language-server-protocol`は`3.17.4`のexact pinを維持します。language-server 7.0.1とprotocol 3.17.5以上の組合せには、未保存変更の`textDocument/didChange`が届かない既知regressionがあります。修正PR [`phpactor/language-server#68`](https://github.com/phpactor/language-server/pull/68)はありますが、2026-09-04時点では未mergeで、language-serverの最新tagも7.0.1です。正式releaseへの修正収録と、pinしたPhpactorとの互換性を確認できるまで解除しません。
+
+Composerの`minimum-stability: dev`も維持します。Phpactor 2026.07.22.0自身が`jetbrains/phpstorm-stubs: dev-master`と`phpactor/tolerant-php-parser: dev-phan-phactor-fixes`をrequireするためです。一方、実際の一時Composer環境で解決できることを確認した上で`prefer-stable: true`とし、それ以外はstable packageを優先します。
+
+## 正直な開示
+
+Phpactorの公式READMEには次のように明記されています。
+
+> Phpactor is a general tool, it is not intended that it be installed as a project dependency.
+
+本拡張はこの方針に沿い、対象プロジェクトのdependencyには追加しません。ただし、Phpactorのboot時に`container.extension_classes`の全classが同じComposer autoloaderから読める必要があるため、本拡張専用のglobal storage内でPhpactorと`bear-phpactor-extension`を一緒に管理します。
+
+## Prior Art（先行プロジェクト）
+
+BEAR.Sunday向けのVS Code支援には、Yuki Adachi氏による[BEAR.Sunday Extension Pack](https://marketplace.visualstudio.com/items?itemName=YukiAdachi.vscode-bear-sunday-extension-pack)という先行プロジェクトがあります。同Extension PackはResource、SQL、Aura Router、Twigなど、BEAR.Sunday開発で必要とされたnavigation機能をVS Code拡張として提供しており、本プロジェクトにとって重要なprior artです。
+
+本プロジェクトはそれを置き換えるものではありません。先行方式にはinstallが単純でdependencyが少なく、VS Codeだけを対象とする場合に直接的という利点があります。本プロジェクトは、現在のPhpactor/LSP extension architectureを使い、framework固有の知識をLanguage Server側へ集約する別の構成です。definitionに加えてcompletion、references、type definition等へ展開しやすく、NeovimやEmacsを含む他のLSP clientからも利用できます。
+
+なお、`bear-phpactor-extension` v0.1.0はTwig navigationを実装していません。先行Extension Packの機能をすべて包含しているとは位置づけず、Twigは既存のTwig toolingとの役割分担を今後検討する対象です。
+
+## IDEA（PhpStorm）
+
+同じ問題領域には、より機能が多く活発に開発されている[`idea-php-bearsunday-plugin`](https://github.com/bearsunday/idea-php-bearsunday-plugin)があります。PhpStormではそちらを利用してください。
 
 ## 既知の制約
 
-セットアップは `phpactor.path` をユーザー設定（User settings）に書き込みます。この拡張でセットアップした後は、他のPHPプロジェクトを開いてもこのphpactorパスが使われるようになります（グローバルインストールしたphpactorを全プロジェクトで共有する設計のため、意図した挙動です）。
-
-ただし、対象プロジェクトの `.vscode/settings.json`（プロジェクトだけの設定）に別途 `phpactor.path` が設定されている場合、VS Codeの優先順位によりそちらが勝つため、ユーザー設定を書き換えても反映されないことがあります。上書き確認のダイアログは出ますが、実際に効くのはプロジェクト側の値です。
+- global setupなので、User Settingsの`phpactor.path`はBEAR.Sunday以外のworkspaceにも影響します。
+- WorkspaceまたはWorkspace Folderに別の`phpactor.path`がある場合はVS Codeの優先順位でそちらが勝ちます。本拡張はUser settingだけを保存・復元し、workspace設定は変更しません。
+- setup済みの状態で`XDG_CONFIG_HOME`を変えると、誤った場所へbackupを復元しないよう再setupを中止します。元の環境でrestoreしてからやり直してください。
+- backup機能導入前の旧版ですでにsetup済みの場合、旧版が介入する前の状態は遡って復元できません。初回更新時に警告し、その時点のconfigとUser settingを復元基準として保存します。
+- setup後のconfigをsemantic mergeで巻き戻すことはしません。後編集があれば自動restoreを止め、明示確認を求めます。
+- uninstall時の自動restoreは行いません。拡張を削除する前にrestore commandを実行してください。
+- global install方式は現在macOSの1環境でのみ実機確認済みです。Linuxは未確認で、WindowsではPhpactor公式clientがWSLまたはLinux VMの利用を案内しています。
+- Twig navigationは提供しません。
 
 ## サポート体制
 
-個人の趣味プロジェクトであり、ベストエフォートでのサポートです。issue は歓迎しますが、対応は時間が許す範囲になります。
+個人の趣味プロジェクトであり、ベストエフォートでのサポートです。issueやpull requestは歓迎しますが、対応の保証はありません。Phpactor upstreamの内部構成変更により、pin更新には追加検証が必要になる場合があります。

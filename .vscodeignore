@@ -2,4 +2,5 @@ src/**
 tsconfig.json
 .vscode/**
 node_modules/**
-RELEASE-PLAN.html
+docs/history/**
+test/**
