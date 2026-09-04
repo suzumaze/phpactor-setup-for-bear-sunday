@@ -2,6 +2,8 @@ src/**
 tsconfig.json
 .vscode/**
 .github/**
+.gitignore
 node_modules/**
 docs/history/**
 test/**
+out/*.map
