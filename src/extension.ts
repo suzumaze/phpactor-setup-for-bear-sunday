@@ -15,10 +15,12 @@ import {
     globalComposerJson,
     globalConfigFile,
     globalConfigRestoreDisposition,
+    globalConfigRestoreWriteDisposition,
     isSupportedPhpVersion,
     parsePhpVersionProbe,
     parseSetupState,
     phpactorPathRestoreDisposition,
+    phpactorPathRestoreWriteDisposition,
     readFileSnapshot,
     readJsonConfigSnapshot,
     recordManagedGlobalConfig,
@@ -148,12 +150,13 @@ function resolveInitBin(globalDir: string): string | undefined {
         INIT_BIN,
     );
     if (fs.existsSync(packageBin)) {
-        // v0.1.0 resolves ../vendor/autoload.php relative to its own __DIR__.
-        // Composer's generated proxy includes it from vendor/suzumaze/... and
-        // therefore cannot satisfy that lookup. Stage the unchanged upstream
-        // initializer under <globalDir>/bin so ../vendor/autoload.php is the
-        // shared autoloader. The config merge still belongs entirely to
-        // bear-phpactor-init rather than being duplicated here.
+        // Verified against the packaged v0.1.0 binary: its two __DIR__-relative
+        // candidates resolve to package-local vendor/autoload.php and
+        // vendor/suzumaze/autoload.php, not <globalDir>/vendor/autoload.php.
+        // Composer's proxy only defines _composer_autoload_path, which v0.1.0
+        // does not read, so direct execution exits before initialization.
+        // Stage the unchanged script where its first candidate is the shared
+        // autoloader. Config generation still belongs to bear-phpactor-init.
         const stagedBin = path.join(globalDir, 'bin', INIT_BIN);
         atomicWriteTextFile(stagedBin, fs.readFileSync(packageBin, 'utf8'));
         return stagedBin;
@@ -485,12 +488,16 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         let state: SetupState = storedState;
 
         const phpactorConfiguration = vscode.workspace.getConfiguration('phpactor');
-        const configDisposition = state.managed.globalConfig === undefined
+        const configAtConfirmation = state.managed.globalConfig === undefined
+            ? undefined
+            : readFileSnapshot(state.managed.globalConfig.path);
+        const pathAtConfirmation = globalPhpactorPathSnapshot(phpactorConfiguration);
+        const configDisposition = configAtConfirmation === undefined
             ? 'already-restored'
-            : globalConfigRestoreDisposition(state, readFileSnapshot(state.managed.globalConfig.path));
+            : globalConfigRestoreDisposition(state, configAtConfirmation);
         const pathDisposition = phpactorPathRestoreDisposition(
             state,
-            globalPhpactorPathSnapshot(phpactorConfiguration),
+            pathAtConfirmation,
         );
         const conflicts: string[] = [];
         if (configDisposition === 'conflict') {
@@ -524,29 +531,43 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
             },
             async (progress) => {
                 const managedConfig = state.managed.globalConfig;
-                if (managedConfig !== undefined) {
-                    const latestDisposition = globalConfigRestoreDisposition(
+                if (managedConfig !== undefined && configAtConfirmation !== undefined) {
+                    const latestConfig = readFileSnapshot(managedConfig.path);
+                    const latestDisposition = globalConfigRestoreWriteDisposition(
                         state,
-                        readFileSnapshot(managedConfig.path),
+                        configAtConfirmation,
+                        latestConfig,
+                        forceConfigConflict,
                     );
-                    if (latestDisposition === 'conflict' && !forceConfigConflict) {
+                    if (latestDisposition === 'changed-after-confirmation') {
                         throw new Error('Phpactor global config が確認後に変更されたため、復元を中止しました。');
+                    }
+                    if (latestDisposition === 'conflict') {
+                        throw new Error('Phpactor global config に未確認の変更があるため、復元を中止しました。');
                     }
                     if (latestDisposition !== 'already-restored') {
                         progress.report({ message: 'Phpactor global configを復元しています…' });
-                        restoreGlobalConfig(managedConfig.path, state.original.globalConfig);
+                        // Re-read inside the write helper as the final guard
+                        // against a change between this decision and rename.
+                        restoreGlobalConfig(managedConfig.path, state.original.globalConfig, latestConfig);
                     }
                     state = withoutManagedConfig(state);
                     await saveRestoreState(context, state);
                 }
 
                 if (state.managed.phpactorPath !== undefined) {
-                    const latestDisposition = phpactorPathRestoreDisposition(
+                    const latestPath = globalPhpactorPathSnapshot(phpactorConfiguration);
+                    const latestDisposition = phpactorPathRestoreWriteDisposition(
                         state,
-                        globalPhpactorPathSnapshot(phpactorConfiguration),
+                        pathAtConfirmation,
+                        latestPath,
+                        forcePathConflict,
                     );
-                    if (latestDisposition === 'conflict' && !forcePathConflict) {
+                    if (latestDisposition === 'changed-after-confirmation') {
                         throw new Error('VS Code User Settings の phpactor.path が確認後に変更されたため、復元を中止しました。');
+                    }
+                    if (latestDisposition === 'conflict') {
+                        throw new Error('VS Code User Settings の phpactor.path に未確認の変更があるため、復元を中止しました。');
                     }
                     if (latestDisposition !== 'already-restored') {
                         progress.report({ message: 'VS Code User Settingsを復元しています…' });

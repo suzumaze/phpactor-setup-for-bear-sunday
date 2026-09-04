@@ -123,6 +123,36 @@ test('generated config is rejected if the initializer drops an existing key', ()
     );
 });
 
+test('generated config preserves every existing extension class without merging unknown classes', () => {
+    const customClass = 'Acme\\Phpactor\\CustomExtension';
+    const seed = JSON.stringify({
+        [core.EXTENSION_CLASSES_KEY]: [customClass, core.BEAR_EXTENSION_CLASS],
+    });
+    const preserved = JSON.stringify({
+        [core.EXTENSION_CLASSES_KEY]: [
+            core.BEAR_EXTENSION_CLASS,
+            customClass,
+            'Phpactor\\Extension\\Core\\CoreExtension',
+        ],
+    });
+    const dropped = initializedConfig(seed);
+
+    core.validateGeneratedConfig(seed, preserved);
+    assert.throws(
+        () => core.validateGeneratedConfig(seed, dropped),
+        /did not preserve existing extension class.*Acme/,
+    );
+});
+
+test('invalid existing extension class setting is rejected instead of overwritten', () => {
+    const seed = JSON.stringify({ [core.EXTENSION_CLASSES_KEY]: { custom: true } });
+
+    assert.throws(
+        () => core.validateGeneratedConfig(seed, initializedConfig('{}')),
+        /existing Phpactor config has no valid.*extension_classes.*list/,
+    );
+});
+
 test('phpactor.path restores an explicitly configured global value', () => {
     const original = { configured: true, value: '/usr/local/bin/phpactor' };
     let state = core.beginSetupState(
@@ -204,6 +234,68 @@ test('restore detects user edits to config and phpactor.path', () => {
     );
 });
 
+test('forced restore is rejected when config or phpactor.path changes after confirmation', () => {
+    const originalConfig = { kind: 'file', content: '{"foo":"before"}\n' };
+    let state = core.beginSetupState(
+        undefined,
+        '/tmp/config/phpactor/phpactor.json',
+        originalConfig,
+        { configured: false },
+        '/tmp/storage/phpactor-global',
+        '0.2.0',
+    );
+    state = core.recordManagedGlobalConfig(
+        state,
+        state.original.globalConfigPath,
+        originalConfig,
+        initializedConfig(originalConfig.content),
+    );
+    state = core.recordManagedPhpactorPath(
+        state,
+        { configured: false },
+        '/tmp/storage/phpactor-global/vendor/bin/phpactor',
+    );
+
+    const confirmedConfig = { kind: 'file', content: '{"foo":"first user edit"}\n' };
+    const changedConfig = { kind: 'file', content: '{"foo":"second user edit"}\n' };
+    const confirmedPath = { configured: true, value: '/first/user/phpactor' };
+    const changedPath = { configured: true, value: '/second/user/phpactor' };
+
+    assert.equal(
+        core.globalConfigRestoreWriteDisposition(state, confirmedConfig, confirmedConfig, true),
+        'restore',
+    );
+    assert.equal(
+        core.globalConfigRestoreWriteDisposition(state, confirmedConfig, changedConfig, true),
+        'changed-after-confirmation',
+    );
+    assert.equal(
+        core.phpactorPathRestoreWriteDisposition(state, confirmedPath, confirmedPath, true),
+        'restore',
+    );
+    assert.equal(
+        core.phpactorPathRestoreWriteDisposition(state, confirmedPath, changedPath, true),
+        'changed-after-confirmation',
+    );
+});
+
+test('global config restore checks the expected snapshot again immediately before writing', () => {
+    withTemporaryEnvironment(({ xdg, home }) => {
+        const target = core.globalConfigFile({ XDG_CONFIG_HOME: xdg }, home);
+        const original = { kind: 'file', content: '{"foo":"original"}\n' };
+        const confirmed = { kind: 'file', content: '{"foo":"confirmed edit"}\n' };
+        const later = '{"foo":"later edit"}\n';
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, later);
+
+        assert.throws(
+            () => core.restoreGlobalConfig(target, original, confirmed),
+            /changed after confirmation/,
+        );
+        assert.equal(fs.readFileSync(target, 'utf8'), later);
+    });
+});
+
 test('repeated setup preserves the original backup and remembers intervening user edits', () => {
     const originalConfig = { kind: 'file', content: '{"foo":"original"}\n' };
     const originalPath = { configured: true, value: '/usr/local/bin/phpactor' };
@@ -281,7 +373,7 @@ test('setup and restore round-trip global config byte-for-byte in isolated HOME 
         core.atomicWriteTextFile(target, generated);
 
         assert.equal(core.globalConfigRestoreDisposition(state, core.readFileSnapshot(target)), 'restore');
-        core.restoreGlobalConfig(target, state.original.globalConfig);
+        core.restoreGlobalConfig(target, state.original.globalConfig, core.readFileSnapshot(target));
         assert.equal(fs.readFileSync(target, 'utf8'), originalContent);
         assert.equal(core.globalConfigRestoreDisposition(state, core.readFileSnapshot(target)), 'already-restored');
     });
@@ -293,10 +385,10 @@ test('restore removes a generated config when no config existed before setup', (
         const original = core.readJsonConfigSnapshot(target);
         const generated = initializedConfig(core.configSeedContent(original));
         core.atomicWriteTextFile(target, generated);
-        core.restoreGlobalConfig(target, original);
+        core.restoreGlobalConfig(target, original, core.readFileSnapshot(target));
 
         assert.equal(fs.existsSync(target), false);
-        core.restoreGlobalConfig(target, original);
+        core.restoreGlobalConfig(target, original, core.readFileSnapshot(target));
         assert.equal(fs.existsSync(target), false);
     });
 });

@@ -14,7 +14,8 @@ export const MINIMUM_PHP_VERSION_ID = 80200;
 export const PHPACTOR_VERSION = '2026.07.22.0';
 
 // phpactor/language-server 7.0.1 loses didChange notifications with protocol
-// 3.17.5+. Keep 3.17.4 until upstream PR #68 has a formal, verified release.
+// 3.17.5+. Upstream PR #68 is merged, but no stable language-server release
+// contains it yet. Keep 3.17.4 until such a release is verified here.
 export const LANGUAGE_SERVER_PROTOCOL_VERSION = '3.17.4';
 export const BEAR_PHPACTOR_EXTENSION_VERSION = '^0.1';
 
@@ -57,6 +58,7 @@ export interface SetupState {
 }
 
 export type RestoreDisposition = 'restore' | 'already-restored' | 'conflict';
+export type RestoreWriteDisposition = RestoreDisposition | 'changed-after-confirmation';
 
 export interface PhpVersionProbe {
     versionId: number;
@@ -137,9 +139,10 @@ export function configSeedContent(snapshot: StoredFileSnapshot): string {
 }
 
 /**
- * `bear-phpactor-init` owns the extension-class merge. This validation keeps
+ * `bear-phpactor-init` owns extension-class generation. This validation keeps
  * the setup helper from publishing a malformed result or silently dropping a
- * key from the user's seed config.
+ * key or extension class from the user's seed config. Missing classes are not
+ * merged here because the managed Composer autoloader may not provide them.
  */
 export function validateGeneratedConfig(seedContent: string, generatedContent: string): void {
     const seed = parseJsonObject(seedContent, 'Phpactor config seed');
@@ -166,6 +169,21 @@ export function validateGeneratedConfig(seedContent: string, generatedContent: s
     }
     if (new Set(classes).size !== classes.length) {
         throw new Error('generated Phpactor config contains duplicate extension classes');
+    }
+
+    const seedClasses = seed[EXTENSION_CLASSES_KEY];
+    if (seedClasses !== undefined) {
+        if (!Array.isArray(seedClasses) || !seedClasses.every((item) => typeof item === 'string')) {
+            throw new Error(`existing Phpactor config has no valid "${EXTENSION_CLASSES_KEY}" list`);
+        }
+        for (const existingClass of new Set(seedClasses)) {
+            if (!classes.includes(existingClass)) {
+                throw new Error(
+                    `bear-phpactor-init did not preserve existing extension class "${existingClass}"; `
+                    + 'setup was stopped because this class may require a different Composer autoloader',
+                );
+            }
+        }
     }
 }
 
@@ -372,16 +390,56 @@ export function phpactorPathRestoreDisposition(
     return 'conflict';
 }
 
-export function restoreGlobalConfig(file: string, original: StoredFileSnapshot): void {
+/**
+ * Re-evaluate a restore against the snapshot shown to the user. A forced
+ * conflict restore is valid only while that exact snapshot is still current.
+ */
+export function globalConfigRestoreWriteDisposition(
+    state: SetupState,
+    confirmed: FileSnapshot,
+    current: FileSnapshot,
+    allowConfirmedConflict: boolean,
+): RestoreWriteDisposition {
+    if (!fileSnapshotsEqual(confirmed, current)) {
+        return 'changed-after-confirmation';
+    }
+
+    const disposition = globalConfigRestoreDisposition(state, current);
+    return disposition === 'conflict' && allowConfirmedConflict ? 'restore' : disposition;
+}
+
+export function phpactorPathRestoreWriteDisposition(
+    state: SetupState,
+    confirmed: SettingSnapshot,
+    current: SettingSnapshot,
+    allowConfirmedConflict: boolean,
+): RestoreWriteDisposition {
+    if (!settingSnapshotsEqual(confirmed, current)) {
+        return 'changed-after-confirmation';
+    }
+
+    const disposition = phpactorPathRestoreDisposition(state, current);
+    return disposition === 'conflict' && allowConfirmedConflict ? 'restore' : disposition;
+}
+
+export function restoreGlobalConfig(
+    file: string,
+    original: StoredFileSnapshot,
+    expectedCurrent: FileSnapshot,
+): void {
+    const current = readFileSnapshot(file);
+    if (!fileSnapshotsEqual(current, expectedCurrent)) {
+        throw new Error(`Refusing to restore global config changed after confirmation: ${file}`);
+    }
+    if (current.kind === 'other') {
+        throw new Error(`Refusing to replace non-file global config: ${file}`);
+    }
+
     if (original.kind === 'file') {
         atomicWriteTextFile(file, original.content);
         return;
     }
 
-    const current = readFileSnapshot(file);
-    if (current.kind === 'other') {
-        throw new Error(`Refusing to remove non-file global config: ${file}`);
-    }
     if (current.kind === 'file') {
         fs.unlinkSync(file);
         flushDirectory(path.dirname(file));

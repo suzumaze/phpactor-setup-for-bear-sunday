@@ -1,6 +1,7 @@
 src/**
 tsconfig.json
 .vscode/**
+.github/**
 node_modules/**
 docs/history/**
 test/**

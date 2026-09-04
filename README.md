@@ -67,14 +67,14 @@ Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す
 1. 既存configをJSON objectとして検証する。invalid JSON、symlink、通常ファイルでない場合は変更せず中止する。
 2. 既存config全体を作業用`.phpactor.json`のseedにする。
 3. `bear-phpactor-init`へ`container.extension_classes`の再生成と重複除去を任せる。
-4. 生成結果が既存の他キーを保持し、BEAR extension classを先頭に1回だけ含むことを検証する。
+4. 生成結果が既存の他キーと既存extension classをすべて保持し、BEAR extension classを先頭に1回だけ含むことを検証する。既存classが生成結果から消えた場合は、別のComposer autoloaderが必要な可能性があるため、独自mergeせずsetupを中止する。
 5. setup中の同時変更がないことを再確認し、一時ファイルをflushしてrenameするatomic writeでglobal configへ反映する。
 
 したがって、PHPStan、PHP CS Fixer、indexer、completion等の既存設定は保持されます。既存configが壊れている場合に、勝手な修正・削除・上書きは行いません。
 
 restoreは現在値と「setup時に本拡張が書いた値」を比較します。一致するときだけ自動復元し、元々configがなければ生成ファイルを削除、元々`phpactor.path`が未設定ならUser setting自体を未設定へ戻します。本拡張の管理対象install directoryも削除します。
 
-setup後のユーザー変更を検出した場合は、変更対象を明示したmodal warningを出します。defaultはCancelで、ユーザーが「変更を破棄して復元」を明示的に選んだ場合だけoriginal backupを上書きします。途中まで復元して失敗した場合も項目ごとに進捗を保存するため、restoreは再実行可能で冪等です。
+setup後のユーザー変更を検出した場合は、変更対象を明示したmodal warningを出します。defaultはCancelで、ユーザーが「変更を破棄して復元」を明示的に選んだ場合だけoriginal backupを上書きします。確認時と書き込み直前のsnapshotが異なる場合は、確認後の変更を上書きせず中止します。途中まで復元して失敗した場合も項目ごとに進捗を保存するため、restoreは再実行可能で冪等です。
 
 ## Phpactor互換性方針
 
@@ -84,7 +84,7 @@ Phpactorのversionはリリース日を表すCalVer形式です。日付が新�
 
 初回解決後の`composer.lock`は管理対象install directoryに保持します。通常の再setupは`composer install`で同じdependency graphを再現し、この拡張がcompatibility manifestを意図的に変更したときだけ`composer update`で再解決します。
 
-`phpactor/language-server-protocol`は`3.17.4`のexact pinを維持します。language-server 7.0.1とprotocol 3.17.5以上の組合せには、未保存変更の`textDocument/didChange`が届かない既知regressionがあります。修正PR [`phpactor/language-server#68`](https://github.com/phpactor/language-server/pull/68)はありますが、2026-09-04時点では未mergeで、language-serverの最新tagも7.0.1です。正式releaseへの修正収録と、pinしたPhpactorとの互換性を確認できるまで解除しません。
+`phpactor/language-server-protocol`は`3.17.4`のexact pinを維持します。language-server 7.0.1とprotocol 3.17.5以上の組合せには、未保存変更の`textDocument/didChange`が届かない既知regressionがあります。修正PR [`phpactor/language-server#68`](https://github.com/phpactor/language-server/pull/68)は2025-12-29にmerge済みですが、2026-09-04時点の最新stable tagは修正を含まない7.0.1です。修正版stable releaseへの収録と、pinしたPhpactorとの互換性を確認できるまで解除しません。
 
 Composerの`minimum-stability: dev`も維持します。Phpactor 2026.07.22.0自身が`jetbrains/phpstorm-stubs: dev-master`と`phpactor/tolerant-php-parser: dev-phan-phactor-fixes`をrequireするためです。一方、実際の一時Composer環境で解決できることを確認した上で`prefer-stable: true`とし、それ以外はstable packageを優先します。
 
@@ -111,6 +111,7 @@ BEAR.Sunday向けのVS Code支援には、Yuki Adachi氏による[BEAR.Sunday Ex
 ## 既知の制約
 
 - global setupなので、User Settingsの`phpactor.path`はBEAR.Sunday以外のworkspaceにも影響します。
+- global Phpactor configへBEAR extension classを登録するため、別のPhpactor installationが同じconfigを読む場合は、そのComposer autoloaderからclassを読み込めるか注意が必要です。既存extension classを管理対象installationで再生成できない場合、本拡張は黙って削除せずsetupを中止します。
 - WorkspaceまたはWorkspace Folderに別の`phpactor.path`がある場合はVS Codeの優先順位でそちらが勝ちます。本拡張はUser settingだけを保存・復元し、workspace設定は変更しません。
 - setup済みの状態で`XDG_CONFIG_HOME`を変えると、誤った場所へbackupを復元しないよう再setupを中止します。元の環境でrestoreしてからやり直してください。
 - backup機能導入前の旧版ですでにsetup済みの場合、旧版が介入する前の状態は遡って復元できません。初回更新時に警告し、その時点のconfigとUser settingを復元基準として保存します。
