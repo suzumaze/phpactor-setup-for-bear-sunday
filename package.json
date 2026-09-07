@@ -2,7 +2,8 @@
     "name": "phpactor-setup-for-bear-sunday",
     "displayName": "Phpactor Setup for BEAR.Sunday",
     "description": "BEAR.Sunday プロジェクト向けに phpactor と、BEAR.Sunday の規約を phpactor に教える Composer パッケージ（suzumaze/bear-phpactor-extension）のグローバルインストールを代行するセットアップ専用拡張",
-    "version": "0.1.0",
+    "version": "0.2.0",
+    "private": true,
     "publisher": "suzumaze",
     "license": "MIT",
     "repository": {
@@ -10,13 +11,14 @@
         "url": "https://github.com/suzumaze/phpactor-setup-for-bear-sunday.git"
     },
     "engines": {
-        "vscode": "^1.80.0"
+        "vscode": "^1.91.0"
     },
     "categories": [
         "Other"
     ],
     "activationEvents": [
         "onCommand:phpactorSetup.setup",
+        "onCommand:phpactorSetup.restore",
         "workspaceContains:composer.json"
     ],
     "main": "./out/extension.js",
@@ -24,18 +26,13 @@
         "commands": [
             {
                 "command": "phpactorSetup.setup",
-                "title": "Phpactor Setup for BEAR.Sunday: このプロジェクト向けにセットアップ"
+                "title": "Phpactor Setup for BEAR.Sunday: グローバルセットアップ"
+            },
+            {
+                "command": "phpactorSetup.restore",
+                "title": "Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す"
             }
-        ],
-        "configuration": {
-            "title": "Phpactor Setup for BEAR.Sunday",
-            "properties": {
-                "phpactor.path": {
-                    "type": "string",
-                    "description": "phpactor バイナリの絶対パス。この拡張がグローバルインストール先の vendor/bin/phpactor を書き込む。"
-                }
-            }
-        }
+        ]
     },
     "extensionPack": [
         "phpactor.vscode-phpactor"
@@ -44,11 +41,13 @@
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile",
+        "test": "node --test test/*.test.js",
         "package": "vsce package"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",
-        "@types/vscode": "^1.80.0",
+        "@types/vscode": "1.91.0",
         "@vscode/vsce": "^3.0.0",
         "typescript": "^5.4.0"
     }

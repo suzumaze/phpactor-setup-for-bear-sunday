@@ -1,5 +1,9 @@
 src/**
 tsconfig.json
 .vscode/**
+.github/**
+.gitignore
 node_modules/**
-RELEASE-PLAN.html
+docs/history/**
+test/**
+out/*.map
