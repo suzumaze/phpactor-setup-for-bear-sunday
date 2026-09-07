@@ -78,7 +78,7 @@ setup後のユーザー変更を検出した場合は、変更対象を明示し
 
 ## Phpactor互換性方針
 
-この拡張が生成するComposer projectは、`phpactor/phpactor`を`2026.07.22.0`へexact pinします。これは`bear-phpactor-extension` v0.1.0の開発・テスト環境で使われ、Phpactor公式VS Code client 1.7.8も取得しているreleaseです。
+この拡張が生成するComposer projectは、`phpactor/phpactor`を`2026.07.22.0`へ、`bear-phpactor-extension`を`^0.1.1`へpinします。これは`bear-phpactor-extension` v0.1.1の開発・テスト環境で使われ、Phpactor公式VS Code client 1.7.8も取得しているreleaseです。
 
 Phpactorのversionはリリース日を表すCalVer形式です。日付が新しいことは、内部extension class構成やextension APIとの互換性を保証しません。`bear-phpactor-extension`はその内部構成に依存するため、未検証の将来versionを`*`や`latest`で自動取得せず、検証後にpinを意図的に更新します。
 
@@ -102,7 +102,7 @@ BEAR.Sunday向けのVS Code支援には、Yuki Adachi氏による[BEAR.Sunday Ex
 
 本プロジェクトはそれを置き換えるものではありません。先行方式にはinstallが単純でdependencyが少なく、VS Codeだけを対象とする場合に直接的という利点があります。本プロジェクトは、現在のPhpactor/LSP extension architectureを使い、framework固有の知識をLanguage Server側へ集約する別の構成です。definitionに加えてcompletion、references、type definition等へ展開しやすく、NeovimやEmacsを含む他のLSP clientからも利用できます。
 
-なお、`bear-phpactor-extension` v0.1.0はTwig navigationを実装していません。先行Extension Packの機能をすべて包含しているとは位置づけず、Twigは既存のTwig toolingとの役割分担を今後検討する対象です。
+`bear-phpactor-extension` v0.1.1はTwig/QiqのBEAR固有navigationをLanguage Server側に実装します。ただし、現在のPhpactor公式VS Code clientはTwig文書をLanguage Serverへ送信しないため、標準セットアップのVS CodeではTwig上のジャンプを利用できません。Qiqは`.php`文書として送信されるため利用できます。先行Extension Packを置き換えるものではなく、LSP clientが対象文書を送信できる場合に利用する、アーキテクチャの異なる選択肢です。
 
 ## IDEA（PhpStorm）
 
@@ -118,7 +118,7 @@ BEAR.Sunday向けのVS Code支援には、Yuki Adachi氏による[BEAR.Sunday Ex
 - setup後のconfigをsemantic mergeで巻き戻すことはしません。後編集があれば自動restoreを止め、明示確認を求めます。
 - uninstall時の自動restoreは行いません。拡張を削除する前にrestore commandを実行してください。
 - global install方式は現在macOSの1環境でのみ実機確認済みです。Linuxは未確認で、WindowsではPhpactor公式clientがWSLまたはLinux VMの利用を案内しています。
-- Twig navigationは提供しません。
+- 現在のPhpactor公式VS Code clientはTwig文書をLanguage Serverへ送信しないため、標準セットアップではTwig上のnavigationを利用できません。利用にはclient側のdocument selector対応が別途必要です。
 
 ## サポート体制
 

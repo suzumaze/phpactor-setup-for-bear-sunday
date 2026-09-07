@@ -422,6 +422,7 @@ test('Composer manifest pins tested compatibility and prefers stable packages', 
 
     assert.equal(composer.require['phpactor/phpactor'], '2026.07.22.0');
     assert.equal(composer.require['phpactor/language-server-protocol'], '3.17.4');
+    assert.equal(composer.require['suzumaze/bear-phpactor-extension'], '^0.1.1');
     assert.equal(composer['minimum-stability'], 'dev');
     assert.equal(composer['prefer-stable'], true);
 });

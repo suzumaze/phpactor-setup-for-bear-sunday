@@ -8,7 +8,7 @@ export const BEAR_EXTENSION_CLASS = 'Suzumaze\\BearPhpactor\\BearSundayExtension
 export const EXTENSION_CLASSES_KEY = 'container.extension_classes';
 export const MINIMUM_PHP_VERSION_ID = 80200;
 
-// This exact release is exercised by bear-phpactor-extension v0.1.0 and the
+// This exact release is exercised by bear-phpactor-extension v0.1.1 and the
 // official VS Code client. Phpactor's date-shaped CalVer does not promise
 // compatibility of its internal extension APIs across later dates.
 export const PHPACTOR_VERSION = '2026.07.22.0';
@@ -17,7 +17,7 @@ export const PHPACTOR_VERSION = '2026.07.22.0';
 // 3.17.5+. Upstream PR #68 is merged, but no stable language-server release
 // contains it yet. Keep 3.17.4 until such a release is verified here.
 export const LANGUAGE_SERVER_PROTOCOL_VERSION = '3.17.4';
-export const BEAR_PHPACTOR_EXTENSION_VERSION = '^0.1';
+export const BEAR_PHPACTOR_EXTENSION_VERSION = '^0.1.1';
 
 export type FileSnapshot =
     | { kind: 'missing' }
