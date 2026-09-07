@@ -27,7 +27,7 @@ phpactor-setup-for-bear-sunday
 - `$XDG_CONFIG_HOME/phpactor/phpactor.json`（未設定時は`~/.config/phpactor/phpactor.json`）
 - VS Code User Settingsの`phpactor.path`
 
-これは1つのworkspace専用設定ではありません。複数のBEAR.Sundayプロジェクトから、同じ管理対象Phpactor installationを共有する設計です。
+これは1つのworkspace専用設定ではありません。同じローカルVS Code環境では初回の1回だけ案内し、複数のBEAR.Sundayプロジェクトから同じ管理対象Phpactor installationを共有する設計です。VS Codeの別プロファイル、Insiders、SSHやDev Containerなどのremote環境は別の環境として扱われます。
 
 ## 要件
 
@@ -39,7 +39,7 @@ PHPはComposer実行前に`PHP_VERSION_ID`で検査し、8.2未満なら環境�
 
 ## 使い方
 
-`bear/resource`を`require`または`require-dev`に持つプロジェクトを開くと、グローバルセットアップであることを明記した確認通知が表示されます。コマンドパレットから手動実行することもできます。
+`bear/resource`を`require`または`require-dev`に持つプロジェクトを開くと、未セットアップの場合だけ、グローバルセットアップであることを明記した確認通知が表示されます。別のBEARプロジェクトを開いても再表示しません。コマンドパレットから手動実行することもでき、手動実行ではBEARプロジェクトを開いていなくても明示確認後に続行できます。
 
 ```text
 Phpactor Setup for BEAR.Sunday: グローバルセットアップ
@@ -50,6 +50,8 @@ setup後にPhpactorを元の状態へ戻す場合は、次を実行します。
 ```text
 Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す
 ```
+
+Phpactor公式VS Code拡張が無効な場合、`phpactor.path`はVS Codeへ登録されません。VS Codeの公開APIでは本拡張から別の拡張を自動的に有効化できないため、変更を始める前に処理を止め、Phpactor拡張の画面を開く案内を表示します。有効化後はウィンドウを再読み込みしてからsetupを実行してください。
 
 ## 非破壊setupとrestore
 

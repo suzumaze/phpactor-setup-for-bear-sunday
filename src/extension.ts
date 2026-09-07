@@ -7,7 +7,10 @@ import {
     SetupState,
     SettingSnapshot,
     StoredFileSnapshot,
+    LEGACY_SETUP_DONE_PREFIX,
     PHPACTOR_VERSION,
+    SETUP_DONE_KEY,
+    SKIP_SETUP_PROMPT_KEY,
     atomicWriteTextFile,
     beginSetupState,
     configSeedContent,
@@ -16,6 +19,8 @@ import {
     globalConfigFile,
     globalConfigRestoreDisposition,
     globalConfigRestoreWriteDisposition,
+    hasLegacySetupDoneMarker,
+    hasLegacySkipSetupPromptMarker,
     isSupportedPhpVersion,
     parsePhpVersionProbe,
     parseSetupState,
@@ -37,19 +42,12 @@ const INIT_BIN = 'bear-phpactor-init';
 const PHPACTOR_BIN_REL = path.join('vendor', 'bin', 'phpactor');
 const GENERATED_CONFIG = '.phpactor.json';
 const RESTORE_STATE_KEY = 'phpactorSetup.restoreState';
-const SETUP_DONE_PREFIX = 'phpactorSetup.setupDone:';
+const PHPACTOR_EXTENSION_ID = 'phpactor.vscode-phpactor';
+const PHPACTOR_EXTENSION_URI = `vscode:extension/${PHPACTOR_EXTENSION_ID}`;
 
 // Prevent setup and restore, or auto-detection and an explicit command, from
 // mutating the same global resources concurrently.
 let operationRunning = false;
-
-function setupDoneKey(projectPath: string): string {
-    return `${SETUP_DONE_PREFIX}${projectPath}`;
-}
-
-function skipPromptKey(projectPath: string): string {
-    return `phpactorSetup.skipPrompt:${projectPath}`;
-}
 
 export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
@@ -205,7 +203,13 @@ async function runInitializer(
 }
 
 function globalPhpactorPathSnapshot(configuration: vscode.WorkspaceConfiguration): SettingSnapshot {
-    const globalValue = configuration.inspect<string | null>('path')?.globalValue;
+    const inspection = configuration.inspect<string | null>('path');
+    if (inspection === undefined) {
+        throw new Error(
+            'phpactor.path がVS Codeに登録されていません。Phpactor公式拡張を有効にして、ウィンドウを再読み込みしてください。',
+        );
+    }
+    const globalValue = inspection.globalValue;
     if (globalValue === undefined) {
         return { configured: false };
     }
@@ -214,6 +218,23 @@ function globalPhpactorPathSnapshot(configuration: vscode.WorkspaceConfiguration
     }
 
     return { configured: true, value: globalValue };
+}
+
+async function registeredPhpactorConfiguration(): Promise<vscode.WorkspaceConfiguration | undefined> {
+    const configuration = vscode.workspace.getConfiguration('phpactor');
+    if (configuration.inspect('path') !== undefined) {
+        return configuration;
+    }
+
+    const answer = await vscode.window.showErrorMessage(
+        'Phpactor公式VS Code拡張が無効か、インストール後の再読み込みが完了していません。VS Codeの公開APIでは別の拡張を自動的に有効化できないため、Phpactorを有効にしてウィンドウを再読み込みしてください。',
+        'Phpactor拡張を開く',
+    );
+    if (answer === 'Phpactor拡張を開く') {
+        await vscode.env.openExternal(vscode.Uri.parse(PHPACTOR_EXTENSION_URI));
+    }
+
+    return undefined;
 }
 
 async function readRestoreState(context: vscode.ExtensionContext): Promise<SetupState | undefined> {
@@ -237,10 +258,7 @@ async function promptForSetupIfNeeded(context: vscode.ExtensionContext): Promise
     if (project === undefined) {
         return;
     }
-    const projectPath = project.folder.uri.fsPath;
-    if (context.globalState.get<boolean>(setupDoneKey(projectPath)) === true
-        || context.globalState.get<boolean>(skipPromptKey(projectPath)) === true
-    ) {
+    if (await setupAlreadyCompleted(context) || await setupPromptSkipped(context)) {
         return;
     }
 
@@ -251,12 +269,36 @@ async function promptForSetupIfNeeded(context: vscode.ExtensionContext): Promise
         '今後確認しない',
     );
     if (answer === 'セットアップする') {
-        if (context.globalState.get<boolean>(setupDoneKey(projectPath)) !== true) {
+        if (!await setupAlreadyCompleted(context)) {
             await runSetup(context);
         }
     } else if (answer === '今後確認しない') {
-        await context.globalState.update(skipPromptKey(projectPath), true);
+        await context.globalState.update(SKIP_SETUP_PROMPT_KEY, true);
     }
+}
+
+async function setupAlreadyCompleted(context: vscode.ExtensionContext): Promise<boolean> {
+    if (context.globalState.get<boolean>(SETUP_DONE_KEY) === true) {
+        return true;
+    }
+    if (!hasLegacySetupDoneMarker(context.globalState.keys())) {
+        return false;
+    }
+
+    await context.globalState.update(SETUP_DONE_KEY, true);
+    return true;
+}
+
+async function setupPromptSkipped(context: vscode.ExtensionContext): Promise<boolean> {
+    if (context.globalState.get<boolean>(SKIP_SETUP_PROMPT_KEY) === true) {
+        return true;
+    }
+    if (!hasLegacySkipSetupPromptMarker(context.globalState.keys())) {
+        return false;
+    }
+
+    await context.globalState.update(SKIP_SETUP_PROMPT_KEY, true);
+    return true;
 }
 
 async function runSetup(context: vscode.ExtensionContext): Promise<void> {
@@ -268,9 +310,19 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
     try {
         const project = findBearProject();
         if (project === undefined) {
-            vscode.window.showErrorMessage(
-                'composer.json の require / require-dev に bear/resource が見つからないため、グローバルセットアップを中止しました。',
+            const answer = await vscode.window.showWarningMessage(
+                'BEAR.Sundayプロジェクトを検出できませんでした。このセットアップは現在のworkspaceではなく、このVS Code環境全体へ反映されます。続行しますか？',
+                { modal: true },
+                'キャンセル',
+                'グローバルセットアップを続行',
             );
+            if (answer !== 'グローバルセットアップを続行') {
+                return;
+            }
+        }
+
+        const phpactorConfiguration = await registeredPhpactorConfiguration();
+        if (phpactorConfiguration === undefined) {
             return;
         }
 
@@ -326,7 +378,6 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
             return;
         }
 
-        const phpactorConfiguration = vscode.workspace.getConfiguration('phpactor');
         const pathBeforeSetup = globalPhpactorPathSnapshot(phpactorConfiguration);
         const globalDir = path.join(context.globalStorageUri.fsPath, GLOBAL_DIR_NAME);
         const phpactorBin = path.join(globalDir, PHPACTOR_BIN_REL);
@@ -454,7 +505,8 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
                 await saveRestoreState(context, state);
                 await phpactorConfiguration.update('path', phpactorBin, vscode.ConfigurationTarget.Global);
 
-                await context.globalState.update(setupDoneKey(project.folder.uri.fsPath), true);
+                await context.globalState.update(SETUP_DONE_KEY, true);
+                await context.globalState.update(SKIP_SETUP_PROMPT_KEY, undefined);
             },
         );
 
@@ -487,7 +539,10 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         }
         let state: SetupState = storedState;
 
-        const phpactorConfiguration = vscode.workspace.getConfiguration('phpactor');
+        const phpactorConfiguration = await registeredPhpactorConfiguration();
+        if (phpactorConfiguration === undefined) {
+            return;
+        }
         const configAtConfirmation = state.managed.globalConfig === undefined
             ? undefined
             : readFileSnapshot(state.managed.globalConfig.path);
@@ -592,7 +647,7 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         );
 
         for (const key of context.globalState.keys()) {
-            if (key.startsWith(SETUP_DONE_PREFIX)) {
+            if (key === SETUP_DONE_KEY || key.startsWith(LEGACY_SETUP_DONE_PREFIX)) {
                 await context.globalState.update(key, undefined);
             }
         }
