@@ -22,6 +22,14 @@ VS Code固有のセットアップ
 phpactor-setup-for-bear-sunday
 ```
 
+## Phpactorについて
+
+[Phpactor](https://phpactor.readthedocs.io/)は、PHPの定義ジャンプ、補完、リファクタリングなどをLSPで提供するLanguage Serverです。VS Codeでは、公式拡張[`phpactor.vscode-phpactor`](https://marketplace.visualstudio.com/items?itemName=phpactor.vscode-phpactor)がPhpactorを起動し、PHP文書とLSP requestを送受信します。
+
+本拡張はPhpactorやそのVS Codeクライアントを置き換えません。本拡張の役割は、互換性を確認したPhpactorと`bear-phpactor-extension`を専用領域へインストールし、公式Phpactor拡張がそのPhpactorを使うよう`phpactor.path`を設定することです。そのため、本拡張だけを有効にしても定義ジャンプは動作せず、公式Phpactor拡張がインストール済みかつ有効である必要があります。
+
+公式Phpactor拡張はextension packとして一緒にインストールされます。ただし、過去にユーザーが無効化した拡張を本拡張から再度有効化することは、VS Codeの公開APIではできません。無効な場合は表示される「Phpactorを確認・有効化」から拡張画面を開き、手動で有効化してウィンドウを再読み込みしてください。
+
 対象プロジェクトの`composer.json`や`.vscode/settings.json`は変更しません。Phpactorと`bear-phpactor-extension`は本拡張の`globalStorageUri`配下へインストールし、次の2点だけをglobalに反映します。
 
 - `$XDG_CONFIG_HOME/phpactor/phpactor.json`（未設定時は`~/.config/phpactor/phpactor.json`）
@@ -34,6 +42,7 @@ phpactor-setup-for-bear-sunday
 - PHP 8.2以上
 - Composer
 - VS Code 1.91以上（依存する`phpactor.vscode-phpactor` 1.7.8と同じminimum）
+- Phpactor公式VS Code拡張（extension packとしてインストールされますが、有効化されている必要があります）
 
 PHPはComposer実行前に`PHP_VERSION_ID`で検査し、8.2未満なら環境を変更せず終了します。
 
@@ -51,7 +60,7 @@ setup後にPhpactorを元の状態へ戻す場合は、次を実行します。
 Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す
 ```
 
-Phpactor公式VS Code拡張が無効な場合、`phpactor.path`はVS Codeへ登録されません。VS Codeの公開APIでは本拡張から別の拡張を自動的に有効化できないため、変更を始める前に処理を止め、Phpactor拡張の画面を開く案内を表示します。有効化後はウィンドウを再読み込みしてからsetupを実行してください。
+Phpactor公式VS Code拡張が無効な場合、`phpactor.path`はVS Codeへ登録されません。その場合は変更を始める前に処理を止め、Phpactor拡張の役割と必要な操作を説明して、拡張画面を開く案内を表示します。
 
 ## 非破壊setupとrestore
 

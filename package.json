@@ -1,7 +1,7 @@
 {
     "name": "phpactor-setup-for-bear-sunday",
     "displayName": "Phpactor Setup for BEAR.Sunday",
-    "description": "BEAR.Sunday プロジェクト向けに phpactor と、BEAR.Sunday の規約を phpactor に教える Composer パッケージ（suzumaze/bear-phpactor-extension）のグローバルインストールを代行するセットアップ専用拡張",
+    "description": "Phpactor公式VS Code拡張を前提に、BEAR.Sunday向けPhpactorとbear-phpactor-extensionのグローバルセットアップを行う拡張",
     "version": "0.2.1",
     "private": true,
     "publisher": "suzumaze",

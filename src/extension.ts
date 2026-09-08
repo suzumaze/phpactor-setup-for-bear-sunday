@@ -227,10 +227,10 @@ async function registeredPhpactorConfiguration(): Promise<vscode.WorkspaceConfig
     }
 
     const answer = await vscode.window.showErrorMessage(
-        'Phpactor公式VS Code拡張が無効か、インストール後の再読み込みが完了していません。VS Codeの公開APIでは別の拡張を自動的に有効化できないため、Phpactorを有効にしてウィンドウを再読み込みしてください。',
-        'Phpactor拡張を開く',
+        'このセットアップ拡張は単独ではPHPのLanguage Server機能を提供せず、Phpactor公式VS Code拡張を前提とします。Phpactorが無効か、インストール後の再読み込みが完了していません。Phpactorを有効にして、ウィンドウを再読み込みしてください。',
+        'Phpactorを確認・有効化',
     );
-    if (answer === 'Phpactor拡張を開く') {
+    if (answer === 'Phpactorを確認・有効化') {
         await vscode.env.openExternal(vscode.Uri.parse(PHPACTOR_EXTENSION_URI));
     }
 
