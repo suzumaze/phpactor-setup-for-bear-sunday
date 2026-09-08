@@ -76,6 +76,8 @@ Phpactor Setup for BEAR.Sunday: 管理対象パッケージを更新
 
 これにより`.html.twig`がPHP文書としてPhpactorへ送信され、Twig内の対応構文からジャンプできます。ただし、VS Code上の言語モードもPHPになるため、Twigのsyntax highlight、diagnostics、formatter、他のTwig拡張の挙動へ影響する可能性があります。標準対応ではなくworkspace限定の暫定策として使用し、不都合があれば設定を削除してください。Qiqは`.php`ファイルなので追加設定は不要です。
 
+`.html.twig`はTwigそのものが要求する拡張子ではありません。この設定は、[BEAR.Sunday公式TwigModuleの標準的なResourceテンプレート配置](https://bearsunday.github.io/manuals/1.0/ja/html-twig-v2.html)に合わせたもので、任意のTwigプロジェクトや独自loader設定まで対象にするものではありません。「ジャンプ」はVS Codeの「定義へ移動」操作を指します。右クリックメニューやコマンドパレットから実行でき、`F12`はその既定ショートカットにすぎません。
+
 setup後にPhpactorを元の状態へ戻す場合は、次を実行します。
 
 ```text
