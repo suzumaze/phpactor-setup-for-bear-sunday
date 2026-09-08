@@ -8,11 +8,13 @@ import {
     SettingSnapshot,
     StoredFileSnapshot,
     LEGACY_SETUP_DONE_PREFIX,
+    BEAR_PHPACTOR_EXTENSION_PACKAGE,
     PHPACTOR_VERSION,
     SETUP_DONE_KEY,
     SKIP_SETUP_PROMPT_KEY,
     atomicWriteTextFile,
     beginSetupState,
+    composerOperation,
     configSeedContent,
     fileSnapshotsEqual,
     globalComposerJson,
@@ -52,6 +54,7 @@ let operationRunning = false;
 export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('phpactorSetup.setup', () => runSetup(context)),
+        vscode.commands.registerCommand('phpactorSetup.update', () => runSetup(context, true)),
         vscode.commands.registerCommand('phpactorSetup.restore', () => runRestore(context)),
     );
     void promptForSetupIfNeeded(context);
@@ -301,7 +304,10 @@ async function setupPromptSkipped(context: vscode.ExtensionContext): Promise<boo
     return true;
 }
 
-async function runSetup(context: vscode.ExtensionContext): Promise<void> {
+async function runSetup(
+    context: vscode.ExtensionContext,
+    updateBearExtensionRequested = false,
+): Promise<void> {
     if (operationRunning) {
         vscode.window.showInformationMessage('グローバルセットアップまたはrestoreはすでに実行中です。');
         return;
@@ -400,6 +406,8 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
             const answer = await vscode.window.showWarningMessage(
                 legacyInstallation
                     ? 'backup機能導入前のグローバルセットアップを検出しました。当時のセットアップ前状態は復元できないため、現在のconfigとphpactor.pathを新しい復元基準として保存します。続行しますか？'
+                    : updateBearExtensionRequested
+                    ? '管理対象のbear-phpactor-extensionを、検証済み互換範囲内の最新版へ更新し、設定を再生成します。続行しますか？'
                     : compatibilityManifestChanged
                     ? `既存のグローバルセットアップを検証済みPhpactor ${PHPACTOR_VERSION}へ更新し、設定を再生成します。続行しますか？`
                     : `既存のグローバルセットアップを再検証し、設定を安全に再生成します。続行しますか？`,
@@ -450,20 +458,33 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
                 // Keep the tested resolution stable on ordinary repeated
                 // setup. Resolve again only when this extension deliberately
                 // changes its compatibility manifest or no lock exists.
-                const composerAction = composerLockExists && compatibilityManifestChanged
-                    ? 'update'
-                    : 'install';
+                const operation = composerOperation(
+                    composerLockExists,
+                    compatibilityManifestChanged,
+                    updateBearExtensionRequested,
+                );
+                const composerArguments = operation === 'update-all'
+                    ? ['update', '--no-interaction', '--no-progress']
+                    : operation === 'update-bear-extension'
+                    ? [
+                        'update',
+                        BEAR_PHPACTOR_EXTENSION_PACKAGE,
+                        '--with-dependencies',
+                        '--no-interaction',
+                        '--no-progress',
+                    ]
+                    : ['install', '--no-interaction', '--no-progress'];
 
                 progress.report({
                     message: !installationExists
                         ? '検証済みバージョンをインストールしています（初回は数分かかります）…'
-                        : composerAction === 'update'
+                        : operation !== 'install'
                         ? '検証済みバージョンへ更新しています…'
                         : 'lock済みdependencyを再検証しています…',
                 });
                 await execFileAsync(
                     composer,
-                    [composerAction, '--no-interaction', '--no-progress'],
+                    composerArguments,
                     { cwd: globalDir },
                 );
 

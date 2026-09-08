@@ -427,6 +427,14 @@ test('Composer manifest pins tested compatibility and prefers stable packages', 
     assert.equal(composer['prefer-stable'], true);
 });
 
+test('Composer operation preserves locks unless an update is explicitly needed', () => {
+    assert.equal(core.composerOperation(false, false, false), 'install');
+    assert.equal(core.composerOperation(true, false, false), 'install');
+    assert.equal(core.composerOperation(true, true, false), 'update-all');
+    assert.equal(core.composerOperation(true, false, true), 'update-bear-extension');
+    assert.equal(core.composerOperation(true, true, true), 'update-all');
+});
+
 test('legacy per-project setup markers are recognized for global migration', () => {
     assert.equal(
         core.hasLegacySetupDoneMarker([

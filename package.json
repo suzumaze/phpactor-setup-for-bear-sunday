@@ -18,6 +18,7 @@
     ],
     "activationEvents": [
         "onCommand:phpactorSetup.setup",
+        "onCommand:phpactorSetup.update",
         "onCommand:phpactorSetup.restore",
         "workspaceContains:composer.json"
     ],
@@ -27,6 +28,10 @@
             {
                 "command": "phpactorSetup.setup",
                 "title": "Phpactor Setup for BEAR.Sunday: グローバルセットアップ"
+            },
+            {
+                "command": "phpactorSetup.update",
+                "title": "Phpactor Setup for BEAR.Sunday: 管理対象パッケージを更新"
             },
             {
                 "command": "phpactorSetup.restore",

@@ -54,6 +54,14 @@ PHPはComposer実行前に`PHP_VERSION_ID`で検査し、8.2未満なら環境�
 Phpactor Setup for BEAR.Sunday: グローバルセットアップ
 ```
 
+`bear-phpactor-extension`の新しい互換バージョンが公開された場合、セットアップ拡張を再インストールする必要はありません。次のコマンドを明示的に実行すると、管理対象Composer projectのlockを更新し、このセットアップ拡張が許可する互換範囲内の最新版を取得して設定を再生成します。
+
+```text
+Phpactor Setup for BEAR.Sunday: 管理対象パッケージを更新
+```
+
+通常の再セットアップは既存の`composer.lock`を再現し、意図しない自動更新を行いません。互換範囲を越えるバージョンは、セットアップ拡張側で互換性を確認して依存条件を更新した新しいリリースが必要です。
+
 setup後にPhpactorを元の状態へ戻す場合は、次を実行します。
 
 ```text
