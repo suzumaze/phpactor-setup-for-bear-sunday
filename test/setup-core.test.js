@@ -427,6 +427,25 @@ test('Composer manifest pins tested compatibility and prefers stable packages', 
     assert.equal(composer['prefer-stable'], true);
 });
 
+test('legacy per-project setup markers are recognized for global migration', () => {
+    assert.equal(
+        core.hasLegacySetupDoneMarker([
+            'unrelated.key',
+            `${core.LEGACY_SETUP_DONE_PREFIX}/workspace/project`,
+        ]),
+        true,
+    );
+    assert.equal(core.hasLegacySetupDoneMarker([core.SETUP_DONE_KEY]), false);
+    assert.equal(core.hasLegacySetupDoneMarker([]), false);
+    assert.equal(
+        core.hasLegacySkipSetupPromptMarker([
+            `${core.LEGACY_SKIP_SETUP_PROMPT_PREFIX}/workspace/project`,
+        ]),
+        true,
+    );
+    assert.equal(core.hasLegacySkipSetupPromptMarker([core.SKIP_SETUP_PROMPT_KEY]), false);
+});
+
 test('invalid or unknown restore state is rejected instead of replacing its backup', () => {
     assert.throws(
         () => core.parseSetupState({ schemaVersion: 99 }),

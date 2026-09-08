@@ -4,6 +4,10 @@ import * as path from 'path';
 import { isDeepStrictEqual } from 'util';
 
 export const SETUP_STATE_SCHEMA_VERSION = 1;
+export const SETUP_DONE_KEY = 'phpactorSetup.setupDone';
+export const LEGACY_SETUP_DONE_PREFIX = `${SETUP_DONE_KEY}:`;
+export const SKIP_SETUP_PROMPT_KEY = 'phpactorSetup.skipPrompt';
+export const LEGACY_SKIP_SETUP_PROMPT_PREFIX = `${SKIP_SETUP_PROMPT_KEY}:`;
 export const BEAR_EXTENSION_CLASS = 'Suzumaze\\BearPhpactor\\BearSundayExtension';
 export const EXTENSION_CLASSES_KEY = 'container.extension_classes';
 export const MINIMUM_PHP_VERSION_ID = 80200;
@@ -63,6 +67,14 @@ export type RestoreWriteDisposition = RestoreDisposition | 'changed-after-confir
 export interface PhpVersionProbe {
     versionId: number;
     version: string;
+}
+
+export function hasLegacySetupDoneMarker(keys: readonly string[]): boolean {
+    return keys.some((key) => key.startsWith(LEGACY_SETUP_DONE_PREFIX));
+}
+
+export function hasLegacySkipSetupPromptMarker(keys: readonly string[]): boolean {
+    return keys.some((key) => key.startsWith(LEGACY_SKIP_SETUP_PROMPT_PREFIX));
 }
 
 export function globalConfigFile(
