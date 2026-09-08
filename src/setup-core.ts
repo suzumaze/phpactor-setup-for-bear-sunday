@@ -21,6 +21,7 @@ export const PHPACTOR_VERSION = '2026.07.22.0';
 // 3.17.5+. Upstream PR #68 is merged, but no stable language-server release
 // contains it yet. Keep 3.17.4 until such a release is verified here.
 export const LANGUAGE_SERVER_PROTOCOL_VERSION = '3.17.4';
+export const BEAR_PHPACTOR_EXTENSION_PACKAGE = 'suzumaze/bear-phpactor-extension';
 export const BEAR_PHPACTOR_EXTENSION_VERSION = '^0.1.1';
 
 export type FileSnapshot =
@@ -63,6 +64,7 @@ export interface SetupState {
 
 export type RestoreDisposition = 'restore' | 'already-restored' | 'conflict';
 export type RestoreWriteDisposition = RestoreDisposition | 'changed-after-confirmation';
+export type ComposerOperation = 'install' | 'update-all' | 'update-bear-extension';
 
 export interface PhpVersionProbe {
     versionId: number;
@@ -75,6 +77,21 @@ export function hasLegacySetupDoneMarker(keys: readonly string[]): boolean {
 
 export function hasLegacySkipSetupPromptMarker(keys: readonly string[]): boolean {
     return keys.some((key) => key.startsWith(LEGACY_SKIP_SETUP_PROMPT_PREFIX));
+}
+
+export function composerOperation(
+    lockExists: boolean,
+    compatibilityManifestChanged: boolean,
+    updateBearExtensionRequested: boolean,
+): ComposerOperation {
+    if (!lockExists) {
+        return 'install';
+    }
+    if (compatibilityManifestChanged) {
+        return 'update-all';
+    }
+
+    return updateBearExtensionRequested ? 'update-bear-extension' : 'install';
 }
 
 export function globalConfigFile(
@@ -104,7 +121,7 @@ export function globalComposerJson(): string {
             php: '^8.2',
             'phpactor/phpactor': PHPACTOR_VERSION,
             'phpactor/language-server-protocol': LANGUAGE_SERVER_PROTOCOL_VERSION,
-            'suzumaze/bear-phpactor-extension': BEAR_PHPACTOR_EXTENSION_VERSION,
+            [BEAR_PHPACTOR_EXTENSION_PACKAGE]: BEAR_PHPACTOR_EXTENSION_VERSION,
         },
     };
 
