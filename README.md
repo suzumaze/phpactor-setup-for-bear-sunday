@@ -62,6 +62,20 @@ Phpactor Setup for BEAR.Sunday: 管理対象パッケージを更新
 
 通常の再セットアップは既存の`composer.lock`を再現し、意図しない自動更新を行いません。互換範囲を越えるバージョンは、セットアップ拡張側で互換性を確認して依存条件を更新した新しいリリースが必要です。
 
+### VS CodeでTwigジャンプを試す
+
+現在のPhpactor公式VS Code clientは、標準では`php`と`blade`文書だけをLanguage Serverへ送信します。Twigファイルも送信する暫定策として、BEARプロジェクトの`.vscode/settings.json`へ次を追加できます。
+
+```json
+{
+    "files.associations": {
+        "*.html.twig": "php"
+    }
+}
+```
+
+これにより`.html.twig`がPHP文書としてPhpactorへ送信され、Twig内の対応構文からジャンプできます。ただし、VS Code上の言語モードもPHPになるため、Twigのsyntax highlight、diagnostics、formatter、他のTwig拡張の挙動へ影響する可能性があります。標準対応ではなくworkspace限定の暫定策として使用し、不都合があれば設定を削除してください。Qiqは`.php`ファイルなので追加設定は不要です。
+
 setup後にPhpactorを元の状態へ戻す場合は、次を実行します。
 
 ```text
@@ -137,7 +151,7 @@ BEAR.Sunday向けのVS Code支援には、Yuki Adachi氏による[BEAR.Sunday Ex
 - setup後のconfigをsemantic mergeで巻き戻すことはしません。後編集があれば自動restoreを止め、明示確認を求めます。
 - uninstall時の自動restoreは行いません。拡張を削除する前にrestore commandを実行してください。
 - global install方式は現在macOSの1環境でのみ実機確認済みです。Linuxは未確認で、WindowsではPhpactor公式clientがWSLまたはLinux VMの利用を案内しています。
-- 現在のPhpactor公式VS Code clientはTwig文書をLanguage Serverへ送信しないため、標準セットアップではTwig上のnavigationを利用できません。利用にはclient側のdocument selector対応が別途必要です。
+- 現在のPhpactor公式VS Code clientはTwig文書を標準ではLanguage Serverへ送信しません。`files.associations`でTwigをPHPとして送る暫定策は利用できますが、言語モードへの影響があります。本来の対応にはclient側のdocument selector対応が必要です。
 
 ## サポート体制
 
