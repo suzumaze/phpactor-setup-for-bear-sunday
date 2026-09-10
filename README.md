@@ -90,15 +90,17 @@ Phpactor公式VS Codeクライアントは、[Twig](https://bearsunday.github.io
 
 既存のPhpactor設定は保持し、BEAR.Sunday拡張クラスだけを追加します。不正なJSON、symlink、通常ファイルでない設定、処理中の同時変更を検出した場合は、上書きせず中止します。
 
-## 元に戻す
+## クリーンアンインストール
 
-セットアップ前のPhpactor設定と`phpactor.path`は、初回変更前に保存されます。元に戻す場合は、拡張をアンインストールする前に次を実行してください。
+この拡張が管理するPhpactorと`bear-phpactor-extension`を削除し、Phpactorのグローバル設定と`phpactor.path`を初回セットアップ前の状態へ戻すには、コマンドパレットから次を実行します。
 
 ```text
-Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す
+Phpactor Setup for BEAR.Sunday: クリーンアンインストール
 ```
 
-現在値がセットアップ時の値と一致する場合だけ自動復元します。セットアップ後のユーザー変更を検出した場合は、破棄するか確認し、確認後に値が変わった場合も上書きしません。管理対象のインストールディレクトリも復元時に削除します。
+実行前に削除内容を確認します。現在値がセットアップ時の値と一致する場合だけ自動復元し、セットアップ後のユーザー変更を検出した場合は、破棄してよいか別途確認します。確認後に値が変わった場合も上書きしません。
+
+この操作は、このセットアップ拡張自体やPhpactor公式VS Code拡張をアンインストールしません。不要であれば、クリーンアンインストールの完了後にVS Codeの拡張画面から削除してください。VS Code拡張のアンインストールを契機とした自動削除は行いません。
 
 ## バージョン方針
 
@@ -121,8 +123,7 @@ Phpactorはプロジェクトdependencyとしてではなく、この拡張専�
 - `phpactor.path`はUser Settingsへ書くため、BEAR.Sunday以外のワークスペースにも影響します。
 - WorkspaceまたはWorkspace Folderに別の`phpactor.path`があれば、VS Codeの優先順位でそちらが使われます。
 - Phpactor公式拡張が無効な場合、この拡張から有効化することはできません。
-- セットアップ後に`XDG_CONFIG_HOME`を変えた場合は、元の環境で復元してから再セットアップしてください。
-- アンインストール時の自動復元は行いません。
+- セットアップ後に`XDG_CONFIG_HOME`を変えた場合は、元の環境でクリーンアンインストールしてから再セットアップしてください。
 - 現在の実機確認はmacOSのみです。Linuxは未確認です。Windowsでは[Phpactor公式クライアント](https://github.com/phpactor/vscode-phpactor#readme)がWSLまたはLinux VMを案内しています。
 - Twigの制約は[「TwigとQiq」](#twigとqiq)のとおりです。
 

@@ -319,7 +319,7 @@ async function showCoreVersion(context: vscode.ExtensionContext): Promise<void> 
 
 async function runCoreUpdate(context: vscode.ExtensionContext): Promise<void> {
     if (operationRunning) {
-        vscode.window.showInformationMessage('セットアップ、コア更新、またはrestoreはすでに実行中です。');
+        vscode.window.showInformationMessage('セットアップ、コア更新、またはクリーンアンインストールはすでに実行中です。');
         return;
     }
     operationRunning = true;
@@ -468,7 +468,7 @@ async function setupPromptSkipped(context: vscode.ExtensionContext): Promise<boo
 
 async function runSetup(context: vscode.ExtensionContext): Promise<void> {
     if (operationRunning) {
-        vscode.window.showInformationMessage('セットアップ、コア更新、またはrestoreはすでに実行中です。');
+        vscode.window.showInformationMessage('セットアップ、コア更新、またはクリーンアンインストールはすでに実行中です。');
         return;
     }
     operationRunning = true;
@@ -538,7 +538,7 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
             && path.resolve(previousState.original.globalConfigPath) !== path.resolve(targetConfig)
         ) {
             vscode.window.showErrorMessage(
-                `保存済みbackupは別のPhpactor global config（${previousState.original.globalConfigPath}）に対応しています。XDG_CONFIG_HOMEを元に戻してrestoreしてから再実行してください。`,
+                `保存済みbackupは別のPhpactor global config（${previousState.original.globalConfigPath}）に対応しています。XDG_CONFIG_HOMEを元に戻してクリーンアンインストールしてから再実行してください。`,
             );
             return;
         }
@@ -701,14 +701,14 @@ async function runSetup(context: vscode.ExtensionContext): Promise<void> {
 
 async function runRestore(context: vscode.ExtensionContext): Promise<void> {
     if (operationRunning) {
-        vscode.window.showInformationMessage('セットアップ、コア更新、またはrestoreはすでに実行中です。');
+        vscode.window.showInformationMessage('セットアップ、コア更新、またはクリーンアンインストールはすでに実行中です。');
         return;
     }
     operationRunning = true;
     try {
         const storedState = await readRestoreState(context);
         if (storedState === undefined) {
-            vscode.window.showInformationMessage('復元するグローバルセットアップのbackupはありません。');
+            vscode.window.showInformationMessage('クリーンアンインストールできる管理対象セットアップはありません。');
             return;
         }
         let state: SetupState = storedState;
@@ -740,22 +740,32 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         let forcePathConflict = false;
         if (conflicts.length > 0) {
             const answer = await vscode.window.showWarningMessage(
-                `セットアップ後に ${conflicts.join(' と ')} が変更されています。これらの変更を破棄して、初回セットアップ前の状態へ戻しますか？`,
+                `セットアップ後に ${conflicts.join(' と ')} が変更されています。これらの変更を破棄し、管理対象のPhpactorとBEAR.Sundayコアを削除して、初回セットアップ前の状態へ戻しますか？`,
                 { modal: true },
                 'キャンセル',
-                '変更を破棄して復元',
+                '変更を破棄してクリーンアンインストール',
             );
-            if (answer !== '変更を破棄して復元') {
+            if (answer !== '変更を破棄してクリーンアンインストール') {
                 return;
             }
             forceConfigConflict = configDisposition === 'conflict';
             forcePathConflict = pathDisposition === 'conflict';
+        } else {
+            const answer = await vscode.window.showWarningMessage(
+                'この拡張が管理するPhpactorとBEAR.Sundayコアを削除し、Phpactor設定を初回セットアップ前の状態へ戻します。続行しますか？',
+                { modal: true },
+                'キャンセル',
+                'クリーンアンインストール',
+            );
+            if (answer !== 'クリーンアンインストール') {
+                return;
+            }
         }
 
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: 'グローバルPhpactorセットアップを復元',
+                title: 'Phpactor Setup for BEAR.Sundayをクリーンアンインストール',
                 cancellable: false,
             },
             async (progress) => {
@@ -829,10 +839,10 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         // cleared. If that update fails, rerunning restore can finish the
         // cleanup without touching already-restored resources.
         await saveRestoreState(context, undefined);
-        vscode.window.showInformationMessage('グローバルPhpactorセットアップを初回セットアップ前の状態へ戻しました。');
+        vscode.window.showInformationMessage('管理対象のPhpactorとBEAR.Sundayコアを削除し、設定を初回セットアップ前の状態へ戻しました。');
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(`グローバルセットアップの復元に失敗しました: ${detail}`);
+        vscode.window.showErrorMessage(`クリーンアンインストールに失敗しました: ${detail}`);
     } finally {
         operationRunning = false;
     }
