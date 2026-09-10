@@ -12,7 +12,7 @@ export const BEAR_EXTENSION_CLASS = 'Suzumaze\\BearPhpactor\\BearSundayExtension
 export const EXTENSION_CLASSES_KEY = 'container.extension_classes';
 export const MINIMUM_PHP_VERSION_ID = 80200;
 
-// This exact release is exercised by bear-phpactor-extension v0.1.1 and the
+// This exact release is exercised by bear-phpactor-extension v0.1.3 and the
 // official VS Code client. Phpactor's date-shaped CalVer does not promise
 // compatibility of its internal extension APIs across later dates.
 export const PHPACTOR_VERSION = '2026.07.22.0';
@@ -22,7 +22,7 @@ export const PHPACTOR_VERSION = '2026.07.22.0';
 // contains it yet. Keep 3.17.4 until such a release is verified here.
 export const LANGUAGE_SERVER_PROTOCOL_VERSION = '3.17.4';
 export const BEAR_PHPACTOR_EXTENSION_PACKAGE = 'suzumaze/bear-phpactor-extension';
-export const BEAR_PHPACTOR_EXTENSION_VERSION = '^0.1.1';
+export const BEAR_PHPACTOR_EXTENSION_VERSION = '^0.1.3';
 
 export type FileSnapshot =
     | { kind: 'missing' }
@@ -126,6 +126,58 @@ export function globalComposerJson(): string {
     };
 
     return JSON.stringify(composer, null, 4) + '\n';
+}
+
+export function coreUpdateComposerArguments(): string[] {
+    return [
+        'update',
+        BEAR_PHPACTOR_EXTENSION_PACKAGE,
+        '--with-dependencies',
+        '--no-interaction',
+        '--no-progress',
+    ];
+}
+
+export function packageVersionFromComposerLock(
+    content: string,
+    packageName: string,
+): string | undefined {
+    let lock: unknown;
+    try {
+        lock = JSON.parse(content);
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`managed composer.lock is not valid JSON: ${detail}`);
+    }
+    if (!isRecord(lock)) {
+        throw new Error('managed composer.lock must contain a JSON object');
+    }
+
+    const matches: string[] = [];
+    for (const section of ['packages', 'packages-dev']) {
+        const packages = lock[section];
+        if (packages === undefined) {
+            continue;
+        }
+        if (!Array.isArray(packages)) {
+            throw new Error(`managed composer.lock field "${section}" must be an array`);
+        }
+        for (const packageEntry of packages) {
+            if (!isRecord(packageEntry) || packageEntry.name !== packageName) {
+                continue;
+            }
+            if (typeof packageEntry.version !== 'string' || packageEntry.version === '') {
+                throw new Error(`managed composer.lock has no valid version for ${packageName}`);
+            }
+            matches.push(packageEntry.version);
+        }
+    }
+
+    if (matches.length > 1) {
+        throw new Error(`managed composer.lock contains ${packageName} more than once`);
+    }
+
+    return matches[0];
 }
 
 export function readFileSnapshot(file: string): FileSnapshot {
