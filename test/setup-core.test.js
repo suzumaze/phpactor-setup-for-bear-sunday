@@ -422,9 +422,39 @@ test('Composer manifest pins tested compatibility and prefers stable packages', 
 
     assert.equal(composer.require['phpactor/phpactor'], '2026.07.22.0');
     assert.equal(composer.require['phpactor/language-server-protocol'], '3.17.4');
-    assert.equal(composer.require['suzumaze/bear-phpactor-extension'], '^0.1.1');
+    assert.equal(composer.require['suzumaze/bear-phpactor-extension'], '^0.1.3');
     assert.equal(composer['minimum-stability'], 'dev');
     assert.equal(composer['prefer-stable'], true);
+});
+
+test('managed core version is read from Composer lock data', () => {
+    const lock = JSON.stringify({
+        packages: [
+            { name: 'phpactor/phpactor', version: '2026.07.22.0' },
+            { name: 'suzumaze/bear-phpactor-extension', version: 'v0.1.3' },
+        ],
+        'packages-dev': [],
+    });
+
+    assert.equal(
+        core.packageVersionFromComposerLock(lock, core.BEAR_PHPACTOR_EXTENSION_PACKAGE),
+        'v0.1.3',
+    );
+    assert.equal(core.packageVersionFromComposerLock(lock, 'missing/package'), undefined);
+    assert.throws(
+        () => core.packageVersionFromComposerLock('{ invalid', core.BEAR_PHPACTOR_EXTENSION_PACKAGE),
+        /not valid JSON/,
+    );
+});
+
+test('core update targets only the BEAR Phpactor package and its dependencies', () => {
+    assert.deepEqual(core.coreUpdateComposerArguments(), [
+        'update',
+        'suzumaze/bear-phpactor-extension',
+        '--with-dependencies',
+        '--no-interaction',
+        '--no-progress',
+    ]);
 });
 
 test('Composer operation preserves locks unless an update is explicitly needed', () => {

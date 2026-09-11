@@ -9,6 +9,7 @@ import {
     StoredFileSnapshot,
     LEGACY_SETUP_DONE_PREFIX,
     BEAR_PHPACTOR_EXTENSION_PACKAGE,
+    BEAR_PHPACTOR_EXTENSION_VERSION,
     PHPACTOR_VERSION,
     SETUP_DONE_KEY,
     SKIP_SETUP_PROMPT_KEY,
@@ -16,6 +17,7 @@ import {
     beginSetupState,
     composerOperation,
     configSeedContent,
+    coreUpdateComposerArguments,
     fileSnapshotsEqual,
     globalComposerJson,
     globalConfigFile,
@@ -24,6 +26,7 @@ import {
     hasLegacySetupDoneMarker,
     hasLegacySkipSetupPromptMarker,
     isSupportedPhpVersion,
+    packageVersionFromComposerLock,
     parsePhpVersionProbe,
     parseSetupState,
     phpactorPathRestoreDisposition,
@@ -54,7 +57,8 @@ let operationRunning = false;
 export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('phpactorSetup.setup', () => runSetup(context)),
-        vscode.commands.registerCommand('phpactorSetup.update', () => runSetup(context, true)),
+        vscode.commands.registerCommand('phpactorSetup.update', () => runCoreUpdate(context)),
+        vscode.commands.registerCommand('phpactorSetup.showCoreVersion', () => showCoreVersion(context)),
         vscode.commands.registerCommand('phpactorSetup.restore', () => runRestore(context)),
     );
     void promptForSetupIfNeeded(context);
@@ -256,6 +260,164 @@ function extensionVersion(context: vscode.ExtensionContext): string {
     return typeof version === 'string' ? version : 'unknown';
 }
 
+function installedCoreVersion(context: vscode.ExtensionContext): string | undefined {
+    const globalDir = path.join(context.globalStorageUri.fsPath, GLOBAL_DIR_NAME);
+    const packageComposer = path.join(
+        globalDir,
+        'vendor',
+        'suzumaze',
+        'bear-phpactor-extension',
+        'composer.json',
+    );
+    if (!fs.existsSync(packageComposer)) {
+        return undefined;
+    }
+
+    const lockFile = path.join(globalDir, 'composer.lock');
+    let lockContent: string;
+    try {
+        lockContent = fs.readFileSync(lockFile, 'utf8');
+    } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+            return undefined;
+        }
+        throw error;
+    }
+
+    return packageVersionFromComposerLock(lockContent, BEAR_PHPACTOR_EXTENSION_PACKAGE);
+}
+
+async function offerGlobalSetup(message: string): Promise<void> {
+    const answer = await vscode.window.showWarningMessage(message, 'グローバルセットアップ');
+    if (answer === 'グローバルセットアップ') {
+        await vscode.commands.executeCommand('phpactorSetup.setup');
+    }
+}
+
+async function showCoreVersion(context: vscode.ExtensionContext): Promise<void> {
+    try {
+        const version = installedCoreVersion(context);
+        if (version === undefined) {
+            await offerGlobalSetup(
+                '管理対象のbear-phpactor-extensionが見つかりません。先にグローバルセットアップを実行してください。',
+            );
+            return;
+        }
+
+        const answer = await vscode.window.showInformationMessage(
+            `現在使用中のbear-phpactor-extensionは ${version} です（更新可能範囲: ${BEAR_PHPACTOR_EXTENSION_VERSION}）。`,
+            'コアを更新',
+        );
+        if (answer === 'コアを更新') {
+            await runCoreUpdate(context);
+        }
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`コアのバージョン確認に失敗しました: ${detail}`);
+    }
+}
+
+async function runCoreUpdate(context: vscode.ExtensionContext): Promise<void> {
+    if (operationRunning) {
+        vscode.window.showInformationMessage('セットアップ、コア更新、またはクリーンアンインストールはすでに実行中です。');
+        return;
+    }
+    operationRunning = true;
+    try {
+        const globalDir = path.join(context.globalStorageUri.fsPath, GLOBAL_DIR_NAME);
+        const versionBefore = installedCoreVersion(context);
+        if (versionBefore === undefined) {
+            await offerGlobalSetup(
+                '管理対象のbear-phpactor-extensionが見つかりません。先にグローバルセットアップを実行してください。',
+            );
+            return;
+        }
+
+        const composerFile = path.join(globalDir, 'composer.json');
+        let installedComposerJson: string;
+        try {
+            installedComposerJson = fs.readFileSync(composerFile, 'utf8');
+        } catch (error) {
+            if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+                await offerGlobalSetup(
+                    '管理対象Composer設定が見つかりません。先にグローバルセットアップを実行してください。',
+                );
+                return;
+            }
+            throw error;
+        }
+        if (installedComposerJson !== globalComposerJson()) {
+            await offerGlobalSetup(
+                'セットアップ拡張の互換性設定が前回から変わっています。コア単独更新の前にグローバルセットアップを再実行してください。',
+            );
+            return;
+        }
+
+        const composer = findExecutable('composer');
+        if (composer === undefined) {
+            vscode.window.showErrorMessage(
+                'composer が見つかりません。https://getcomposer.org/download/ の手順でインストールし、PATH を通してください。',
+            );
+            return;
+        }
+        const php = findExecutable('php');
+        if (php === undefined) {
+            vscode.window.showErrorMessage('php が見つかりません。PHP 8.2 以上をインストールし、PATH を通してください。');
+            return;
+        }
+
+        const probeResult = await execFileAsync(php, ['-r', 'echo PHP_VERSION_ID, "\\n", PHP_VERSION;']);
+        const phpVersion = parsePhpVersionProbe(probeResult.stdout);
+        if (!isSupportedPhpVersion(phpVersion.versionId)) {
+            vscode.window.showErrorMessage(
+                `PHP ${phpVersion.version} が検出されました。コア更新にはPHP 8.2以上が必要です。`,
+            );
+            return;
+        }
+
+        const answer = await vscode.window.showWarningMessage(
+            `bear-phpactor-extension ${versionBefore}を、互換範囲${BEAR_PHPACTOR_EXTENSION_VERSION}内の最新版へ更新します。Phpactor本体、phpactor.path、global configは変更しません。`,
+            { modal: true },
+            'キャンセル',
+            'コアを更新',
+        );
+        if (answer !== 'コアを更新') {
+            return;
+        }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: 'BEAR.Sundayコアを更新',
+                cancellable: false,
+            },
+            async (progress) => {
+                progress.report({ message: '互換範囲内の最新版を確認しています…' });
+                await execFileAsync(composer, coreUpdateComposerArguments(), { cwd: globalDir });
+            },
+        );
+
+        const versionAfter = installedCoreVersion(context);
+        if (versionAfter === undefined) {
+            throw new Error('更新後のbear-phpactor-extensionを確認できません。');
+        }
+        await context.globalState.update(SETUP_DONE_KEY, true);
+
+        const message = versionAfter === versionBefore
+            ? `bear-phpactor-extensionは${versionAfter}です。互換範囲内で更新可能な新しいversionはありませんでした。`
+            : `bear-phpactor-extensionを${versionBefore}から${versionAfter}へ更新しました。`;
+        const reload = await vscode.window.showInformationMessage(message, '再読み込み');
+        if (reload === '再読み込み') {
+            await vscode.commands.executeCommand('workbench.action.reloadWindow');
+        }
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`コア更新に失敗しました: ${detail}`);
+    } finally {
+        operationRunning = false;
+    }
+}
+
 async function promptForSetupIfNeeded(context: vscode.ExtensionContext): Promise<void> {
     const project = findBearProject();
     if (project === undefined) {
@@ -304,12 +466,9 @@ async function setupPromptSkipped(context: vscode.ExtensionContext): Promise<boo
     return true;
 }
 
-async function runSetup(
-    context: vscode.ExtensionContext,
-    updateBearExtensionRequested = false,
-): Promise<void> {
+async function runSetup(context: vscode.ExtensionContext): Promise<void> {
     if (operationRunning) {
-        vscode.window.showInformationMessage('グローバルセットアップまたはrestoreはすでに実行中です。');
+        vscode.window.showInformationMessage('セットアップ、コア更新、またはクリーンアンインストールはすでに実行中です。');
         return;
     }
     operationRunning = true;
@@ -379,7 +538,7 @@ async function runSetup(
             && path.resolve(previousState.original.globalConfigPath) !== path.resolve(targetConfig)
         ) {
             vscode.window.showErrorMessage(
-                `保存済みbackupは別のPhpactor global config（${previousState.original.globalConfigPath}）に対応しています。XDG_CONFIG_HOMEを元に戻してrestoreしてから再実行してください。`,
+                `保存済みbackupは別のPhpactor global config（${previousState.original.globalConfigPath}）に対応しています。XDG_CONFIG_HOMEを元に戻してクリーンアンインストールしてから再実行してください。`,
             );
             return;
         }
@@ -406,8 +565,6 @@ async function runSetup(
             const answer = await vscode.window.showWarningMessage(
                 legacyInstallation
                     ? 'backup機能導入前のグローバルセットアップを検出しました。当時のセットアップ前状態は復元できないため、現在のconfigとphpactor.pathを新しい復元基準として保存します。続行しますか？'
-                    : updateBearExtensionRequested
-                    ? '管理対象のbear-phpactor-extensionを、検証済み互換範囲内の最新版へ更新し、設定を再生成します。続行しますか？'
                     : compatibilityManifestChanged
                     ? `既存のグローバルセットアップを検証済みPhpactor ${PHPACTOR_VERSION}へ更新し、設定を再生成します。続行しますか？`
                     : `既存のグローバルセットアップを再検証し、設定を安全に再生成します。続行しますか？`,
@@ -420,7 +577,9 @@ async function runSetup(
             }
         }
 
-        if (!settingSnapshotsEqual(pathBeforeSetup, { configured: true, value: phpactorBin })) {
+        const desiredPath = { configured: true, value: phpactorBin } as const;
+        const phpactorPathUpdateRequired = !settingSnapshotsEqual(pathBeforeSetup, desiredPath);
+        if (phpactorPathUpdateRequired) {
             const current = pathBeforeSetup.configured ? String(pathBeforeSetup.value) : '未設定';
             const answer = await vscode.window.showWarningMessage(
                 `VS Code User Settings（global）の phpactor.path は現在「${current}」です。「${phpactorBin}」へ変更します。続行しますか？`,
@@ -461,18 +620,10 @@ async function runSetup(
                 const operation = composerOperation(
                     composerLockExists,
                     compatibilityManifestChanged,
-                    updateBearExtensionRequested,
+                    false,
                 );
                 const composerArguments = operation === 'update-all'
                     ? ['update', '--no-interaction', '--no-progress']
-                    : operation === 'update-bear-extension'
-                    ? [
-                        'update',
-                        BEAR_PHPACTOR_EXTENSION_PACKAGE,
-                        '--with-dependencies',
-                        '--no-interaction',
-                        '--no-progress',
-                    ]
                     : ['install', '--no-interaction', '--no-progress'];
 
                 progress.report({
@@ -521,10 +672,12 @@ async function runSetup(
                 await saveRestoreState(context, state);
                 atomicWriteTextFile(targetConfig, generatedContent);
 
-                progress.report({ message: 'VS Code User Settingsを更新しています…' });
-                state = recordManagedPhpactorPath(state, pathBeforeSetup, phpactorBin);
-                await saveRestoreState(context, state);
-                await phpactorConfiguration.update('path', phpactorBin, vscode.ConfigurationTarget.Global);
+                if (phpactorPathUpdateRequired) {
+                    progress.report({ message: 'VS Code User Settingsを更新しています…' });
+                    state = recordManagedPhpactorPath(state, pathBeforeSetup, phpactorBin);
+                    await saveRestoreState(context, state);
+                    await phpactorConfiguration.update('path', phpactorBin, vscode.ConfigurationTarget.Global);
+                }
 
                 await context.globalState.update(SETUP_DONE_KEY, true);
                 await context.globalState.update(SKIP_SETUP_PROMPT_KEY, undefined);
@@ -548,14 +701,14 @@ async function runSetup(
 
 async function runRestore(context: vscode.ExtensionContext): Promise<void> {
     if (operationRunning) {
-        vscode.window.showInformationMessage('グローバルセットアップまたはrestoreはすでに実行中です。');
+        vscode.window.showInformationMessage('セットアップ、コア更新、またはクリーンアンインストールはすでに実行中です。');
         return;
     }
     operationRunning = true;
     try {
         const storedState = await readRestoreState(context);
         if (storedState === undefined) {
-            vscode.window.showInformationMessage('復元するグローバルセットアップのbackupはありません。');
+            vscode.window.showInformationMessage('クリーンアンインストールできる管理対象セットアップはありません。');
             return;
         }
         let state: SetupState = storedState;
@@ -587,22 +740,32 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         let forcePathConflict = false;
         if (conflicts.length > 0) {
             const answer = await vscode.window.showWarningMessage(
-                `セットアップ後に ${conflicts.join(' と ')} が変更されています。これらの変更を破棄して、初回セットアップ前の状態へ戻しますか？`,
+                `セットアップ後に ${conflicts.join(' と ')} が変更されています。これらの変更を破棄し、管理対象のPhpactorとBEAR.Sundayコアを削除して、初回セットアップ前の状態へ戻しますか？`,
                 { modal: true },
                 'キャンセル',
-                '変更を破棄して復元',
+                '変更を破棄してクリーンアンインストール',
             );
-            if (answer !== '変更を破棄して復元') {
+            if (answer !== '変更を破棄してクリーンアンインストール') {
                 return;
             }
             forceConfigConflict = configDisposition === 'conflict';
             forcePathConflict = pathDisposition === 'conflict';
+        } else {
+            const answer = await vscode.window.showWarningMessage(
+                'この拡張が管理するPhpactorとBEAR.Sundayコアを削除し、Phpactor設定を初回セットアップ前の状態へ戻します。続行しますか？',
+                { modal: true },
+                'キャンセル',
+                'クリーンアンインストール',
+            );
+            if (answer !== 'クリーンアンインストール') {
+                return;
+            }
         }
 
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: 'グローバルPhpactorセットアップを復元',
+                title: 'Phpactor Setup for BEAR.Sundayをクリーンアンインストール',
                 cancellable: false,
             },
             async (progress) => {
@@ -676,10 +839,10 @@ async function runRestore(context: vscode.ExtensionContext): Promise<void> {
         // cleared. If that update fails, rerunning restore can finish the
         // cleanup without touching already-restored resources.
         await saveRestoreState(context, undefined);
-        vscode.window.showInformationMessage('グローバルPhpactorセットアップを初回セットアップ前の状態へ戻しました。');
+        vscode.window.showInformationMessage('管理対象のPhpactorとBEAR.Sundayコアを削除し、設定を初回セットアップ前の状態へ戻しました。');
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(`グローバルセットアップの復元に失敗しました: ${detail}`);
+        vscode.window.showErrorMessage(`クリーンアンインストールに失敗しました: ${detail}`);
     } finally {
         operationRunning = false;
     }

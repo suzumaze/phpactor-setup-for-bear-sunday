@@ -2,7 +2,7 @@
     "name": "phpactor-setup-for-bear-sunday",
     "displayName": "Phpactor Setup for BEAR.Sunday",
     "description": "Phpactor公式VS Code拡張を前提に、BEAR.Sunday向けPhpactorとbear-phpactor-extensionのグローバルセットアップを行う拡張",
-    "version": "0.2.2",
+    "version": "0.2.4",
     "private": true,
     "publisher": "suzumaze",
     "license": "MIT",
@@ -19,6 +19,7 @@
     "activationEvents": [
         "onCommand:phpactorSetup.setup",
         "onCommand:phpactorSetup.update",
+        "onCommand:phpactorSetup.showCoreVersion",
         "onCommand:phpactorSetup.restore",
         "workspaceContains:composer.json"
     ],
@@ -31,11 +32,15 @@
             },
             {
                 "command": "phpactorSetup.update",
-                "title": "Phpactor Setup for BEAR.Sunday: 管理対象パッケージを更新"
+                "title": "Phpactor Setup for BEAR.Sunday: コアを更新"
+            },
+            {
+                "command": "phpactorSetup.showCoreVersion",
+                "title": "Phpactor Setup for BEAR.Sunday: 使用中のコアバージョンを確認"
             },
             {
                 "command": "phpactorSetup.restore",
-                "title": "Phpactor Setup for BEAR.Sunday: グローバルセットアップを元に戻す"
+                "title": "Phpactor Setup for BEAR.Sunday: クリーンアンインストール"
             }
         ]
     },
